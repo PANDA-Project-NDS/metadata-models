@@ -45,7 +45,7 @@ Read the context carefully and extract the data into the requested JSON schema.
 """
 
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 provider = OpenAIProvider(
@@ -53,7 +53,7 @@ provider = OpenAIProvider(
     api_key='local-dev'
 )
 
-llm_model = OpenAIModel(
+llm_model = OpenAIChatModel(
     'qwen/qwen3-1.7b',
     provider=provider
 )

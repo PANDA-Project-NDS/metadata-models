@@ -39,9 +39,10 @@ To adhere to DRY (Don't Repeat Yourself) principles, we defined granular, modula
 
 ## Step 1: Data Ingestion and Indexing
 
-External systems provide heterogeneous documents. We use LlamaIndex to load these documents, split them into manageable chunks (e.g., 512 tokens), and embed them into a VectorStore using a strong local embedding model.
+External systems provide heterogeneous documents. We use LlamaIndex to load these documents, inject a `journal_id` into the metadata, split them into manageable chunks (e.g., 512 tokens), and embed them into a global VectorStore using a strong local embedding model.
 
 ```python
+import os
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -52,36 +53,44 @@ Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 Settings.text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 Settings.llm = None # We use Pydantic AI for the LLM part
 
-def build_journal_index(directory_path: str) -> VectorStoreIndex:
-    """Loads documents for a specific journal and builds a vector index."""
+def build_global_index(directory_path: str) -> VectorStoreIndex:
+    """Loads all documents, injects journal_id metadata, and builds a global vector index."""
     documents = SimpleDirectoryReader(directory_path).load_data()
-    index = VectorStoreIndex.from_documents(documents)
-    return index
+    
+    # Inject journal_id metadata for filtering
+    for doc in documents:
+        filename = os.path.basename(doc.metadata.get("file_path", ""))
+        parts = filename.split('_')
+        journal_id = f"{parts[0]}_{parts[1]}" if len(parts) >= 2 else "unknown"
+        doc.metadata["journal_id"] = journal_id
+
+    return VectorStoreIndex.from_documents(documents)
 ```
 
 ## Step 2: Targeted Multi-Pass Retrieval
 
-Instead of relying on a single broad search, we perform targeted semantic searches for specific groups of metadata fields across four passes. This ensures the LLM receives minimal, highly relevant context for each specific sub-task.
+Instead of relying on a single broad search, we perform targeted semantic searches for specific groups of metadata fields across four passes. We also apply a `MetadataFilter` to restrict the search strictly to documents matching the current `journal_id`.
 
 ```python
+from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
+
 # Defined in agents.py
 EXTRACTION_QUERIES = {
     "basic_info": [
         "Journal title, publisher, about this journal, mission, scope, sections",
         "ISSN, print ISSN, online ISSN, indexed in, abstracting and indexing databases"
     ],
-    "policies_submissions": [
-        "Publication frequency, issues per year, submission guidelines, author instructions, article types accepted",
-        "Peer review process, blind review, open access policy statement, copyright, quality assurance"
-    ],
-    # ... more queries for fees and people
+    # ... more queries for policies, fees and people
 }
 
-def retrieve_for_pass(index: VectorStoreIndex, queries: list[str]) -> list:
-    """Performs targeted queries to gather nodes for a specific extraction pass."""
-    retriever = index.as_retriever(similarity_top_k=3)
-    unique_nodes = {}
+def retrieve_for_pass(index: VectorStoreIndex, queries: list[str], journal_id: str) -> list:
+    """Performs targeted queries filtered by a specific journal_id."""
+    filters = MetadataFilters(
+        filters=[ExactMatchFilter(key="journal_id", value=journal_id)]
+    )
+    retriever = index.as_retriever(similarity_top_k=3, filters=filters)
     
+    unique_nodes = {}
     for query in queries:
         nodes = retriever.retrieve(query)
         for node in nodes:
@@ -109,7 +118,7 @@ def assemble_context(nodes: list) -> str:
 
 ## Step 4: Multi-Pass Structured Extraction (Pydantic AI)
 
-We define multiple partial Pydantic models (e.g., `BasicInfoExtraction`, `FeesAndMembershipExtraction`) that represent subsets of the full schema. Pydantic AI connects directly to the local LM-Studio endpoint, and separate agents handle each pass.
+We define multiple partial Pydantic models (e.g., `BasicInfoExtraction`, `FeesAndMembershipExtraction`) that represent subsets of the full schema. Pydantic AI connects directly to the local LM-Studio endpoint, and separate agents handle each pass, scoped by `journal_id`.
 
 ```python
 from agents import (
@@ -118,34 +127,37 @@ from agents import (
 )
 from models.journal import JournalMetadata
 
-def run_extraction_pass(index: VectorStoreIndex, agent, queries: list[str]):
-    """Executes a single extraction pass using specific queries and an agent."""
-    nodes = retrieve_for_pass(index, queries)
+async def run_extraction_pass(index: VectorStoreIndex, agent, queries: list[str], journal_id: str):
+    """Executes a single extraction pass using specific queries, filtered by journal_id."""
+    nodes = retrieve_for_pass(index, queries, journal_id)
     context_str = assemble_context(nodes)
     
     prompt = f"Extract metadata using the following retrieved context:\n\n{context_str}"
-    result = agent.run_sync(prompt)
+    result = await agent.run(prompt)
     return result.data
 ```
 
 ## Step 5: Final Execution Pipeline
 
-The final step ties the multi-pass retrieval and extraction together and merges the partial results into the full `JournalMetadata` model.
+The final step ties the multi-pass retrieval and extraction together. It finds all unique `journal_id`s in the index, executes the extraction passes for each independently, and merges the partial results into a full `JournalMetadata` object.
 
 ```python
-def process_journal(directory_path: str) -> JournalMetadata:
-    """End-to-end multi-pass pipeline for a single journal."""
+import asyncio
+
+async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMetadata:
+    """End-to-end multi-pass pipeline for a single journal ID using the global index."""
     
-    # 1. Build Index
-    index = build_journal_index(directory_path)
+    # 1. Execute Passes Concurrently
+    basic_task = run_extraction_pass(index, basic_info_agent, EXTRACTION_QUERIES["basic_info"], journal_id)
+    policy_task = run_extraction_pass(index, policies_agent, EXTRACTION_QUERIES["policies_submissions"], journal_id)
+    fees_task = run_extraction_pass(index, fees_agent, EXTRACTION_QUERIES["fees_membership"], journal_id)
+    people_task = run_extraction_pass(index, people_metrics_agent, EXTRACTION_QUERIES["people_metrics"], journal_id)
     
-    # 2. Execute Passes
-    basic_data = run_extraction_pass(index, basic_info_agent, EXTRACTION_QUERIES["basic_info"])
-    policy_data = run_extraction_pass(index, policies_agent, EXTRACTION_QUERIES["policies_submissions"])
-    fees_data = run_extraction_pass(index, fees_agent, EXTRACTION_QUERIES["fees_membership"])
-    people_data = run_extraction_pass(index, people_metrics_agent, EXTRACTION_QUERIES["people_metrics"])
+    basic_data, policy_data, fees_data, people_data = await asyncio.gather(
+        basic_task, policy_task, fees_task, people_task
+    )
     
-    # 3. Merge into Final Schema (Nested Composition)
+    # 2. Merge into Final Schema (Nested Composition)
     final_metadata = JournalMetadata(
         basic_info=basic_data,
         policies=policy_data,
@@ -154,4 +166,9 @@ def process_journal(directory_path: str) -> JournalMetadata:
     )
     
     return final_metadata
+
+# Main Loop over all journals
+# global_index = build_global_index("example_docs")
+# for j_id in unique_journal_ids:
+#     metadata = await process_journal(global_index, j_id)
 ```
