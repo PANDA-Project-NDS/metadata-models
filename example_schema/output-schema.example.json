@@ -1,0 +1,72 @@
+{
+  "title": "Journal of Example Studies",
+  "publisher": "Example Publisher",
+  "description": "A journal publishing research on example-based methodologies and demonstrations.",
+
+  "publication_frequency": {
+    "frequency": "Monthly",
+    "issues_per_year": 12
+  },
+
+  "submission_guidelines": "Submit via the online portal. Manuscripts must follow the style guide.",
+
+  "review_process": {
+    "type": "double-blind",
+    "description": "Peer review with anonymized reviewers and authors."
+  },
+
+  "membership": null,
+
+  "issn": {
+    "print": "1234-5678",
+    "online": "8765-4321",
+    "raw": {
+      "print": "12345678",
+      "online": null
+    }
+  },
+
+  "article_processing_charges": [
+    {
+      "article_type": "Original Research",
+      "category": null,
+      "fee": { "amount": 1500, "currency": "USD" },
+      "raw": "$1,500",
+      "description": "Standard APC for original research articles.",
+      "regular_fee": null,
+      "footnote": null
+    }
+  ],
+
+  "discounts": null,
+
+  "article_types": [ { "type": "Original Research", "notes": null } ],
+
+  "editors": [
+    { "name": "Dr. Alice Example", "role": "Editor-in-Chief", "affiliations": ["Example University"] }
+  ],
+
+  "journal_sections": ["Research Articles", "Reviews"],
+
+  "mission_scope": "Covers methodological advances and example-driven research.",
+
+  "additional_information": {
+    "open_access_statement": "This journal is hybrid open access.",
+    "copyright_statement": null,
+    "quality_assurance": null,
+    "other": null
+  },
+
+  "facts": {
+    "short_name": "J. Example Stud.",
+    "abbreviation": "JES",
+    "indexed_in": "ExampleIndex",
+    "impact": {
+      "cite_score": 4.2,
+      "impact_factor": 3.1,
+      "other": null
+    }
+  },
+
+  "journal_impact": { "impact_factor": 3.1, "cite_score": 4.2, "other": null }
+}

@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JournalMetadata",
+  "description": "Canonical schema for journal metadata produced by the transform/unify pipelines. Scalars may be null; lists should be empty arrays when no items.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Canonical journal title. Use null when unknown."
+    },
+
+    "publisher": {
+      "type": ["string", "null"],
+      "description": "Publisher name or null if unknown."
+    },
+
+    "description": {
+      "type": ["string", "null"],
+      "description": "Short prose summary describing focus / scope of the journal."
+    },
+
+    "publication_frequency": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Structured publication frequency information or null.",
+      "properties": {
+        "frequency": {
+          "type": ["string", "null"],
+          "description": "Human readable frequency label (e.g. 'Monthly', 'Quarterly')."
+        },
+        "issues_per_year": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Exact number of issues per year when available."
+        }
+      }
+    },
+
+    "submission_guidelines": {
+      "type": ["string", "null"],
+      "description": "Full submission guidelines text or null if missing."
+    },
+
+    "review_process": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Structured review process information.",
+      "properties": {
+        "type": {
+          "type": ["string", "null"],
+          "enum": ["single-blind", "double-blind", "open", "other", null],
+          "description": "Canonical review type when known."
+        },
+        "description": {
+          "type": ["string", "null"],
+          "description": "Freeform description of the review workflow."
+        }
+      }
+    },
+
+    "membership": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Information about membership models (if any).",
+      "properties": {
+        "type": { "type": ["string", "null"], "description": "Membership type (e.g. 'society', 'institutional')." },
+        "details": { "type": ["string", "null"], "description": "Further membership details." }
+      }
+    },
+
+    "issn": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "ISSN identifiers. Use canonical pattern when possible; preserve raw values in issn.raw.",
+      "properties": {
+        "print": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{3}[\\dX]$", "description": "Print ISSN in NNNN-NNNN form or null." },
+        "online": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{3}[\\dX]$", "description": "Online ISSN in NNNN-NNNN form or null." },
+        "raw": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "description": "Original raw values if parsing to canonical failed.",
+          "properties": {
+            "print": { "type": ["string", "null"] },
+            "online": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+
+    "article_processing_charges": {
+      "type": ["array", "null"],
+      "description": "Array of APC entries or null when unknown.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "article_type": { "type": ["string", "null"], "description": "Article type this fee applies to." },
+          "category": { "type": ["string", "null"], "description": "Optional category label (Frontiers-style categories)." },
+          "fee": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "description": "Parsed numeric fee when available.",
+            "properties": {
+              "amount": { "type": ["number", "null"], "description": "Numeric fee value when parseable." },
+              "currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$", "description": "ISO 4217 currency code when known." }
+            }
+          },
+          "raw": { "type": ["string", "null"], "description": "Original textual fee value (fallback)." },
+          "description": { "type": ["string", "null"], "description": "Human-readable notes about the fee." },
+          "regular_fee": { "type": ["string", "null"], "description": "Table-specific field when present." },
+          "footnote": { "type": ["string", "null"], "description": "Footnote text for a table row if available." }
+        }
+      }
+    },
+
+    "discounts": {
+      "type": ["array", "null"],
+      "description": "Waivers/discounts list or null.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": ["string", "null"], "description": "Discount type label." },
+          "amount": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "amount": { "type": ["number", "null"], "description": "Numeric discount amount if parseable." },
+              "currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$", "description": "Currency code if known." }
+            }
+          },
+          "eligibility": { "type": ["string", "null"], "description": "Who is eligible for the discount." },
+          "raw": { "type": ["string", "null"], "description": "Original textual discount cell value." }
+        }
+      }
+    },
+
+    "article_types": {
+      "type": ["array", "null"],
+      "description": "Optional normalized list of article types (if available).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string" },
+          "notes": { "type": ["string", "null"] }
+        },
+        "required": ["type"]
+      }
+    },
+
+    "editors": {
+      "type": ["array", "null"],
+      "description": "List of editor entries or null.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "description": "Editor full name." },
+          "role": { "type": ["string", "null"], "description": "Role or title (Editor-in-Chief, etc.)." },
+          "affiliations": { "type": ["array", "null"], "items": { "type": "string" }, "description": "List of affiliation strings." }
+        },
+        "required": ["name"]
+      }
+    },
+
+    "journal_sections": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Section names within the journal (if available)." },
+
+    "mission_scope": { "type": ["string", "null"], "description": "Mission & scope concise summary." },
+
+    "additional_information": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Publisher-specific additional fields (keep minimal).",
+      "properties": {
+        "open_access_statement": { "type": ["string", "null"], "description": "Open access policy statement." },
+        "copyright_statement": { "type": ["string", "null"], "description": "Copyright statement text." },
+        "quality_assurance": { "type": ["string", "null"], "description": "Quality assurance / peer review standards notes." },
+        "other": { "type": ["object", "null"], "additionalProperties": { "type": ["string", "null"] }, "description": "Other small publisher-specific fields." }
+      }
+    },
+
+    "facts": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Frontiers-style facts block if present.",
+      "properties": {
+        "short_name": { "type": ["string", "null"] },
+        "abbreviation": { "type": ["string", "null"] },
+        "indexed_in": { "type": ["string", "null"] },
+        "impact": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "cite_score": { "type": ["number", "null"] },
+            "impact_factor": { "type": ["number", "null"] },
+            "other": { "type": ["object", "null"], "additionalProperties": { "type": ["number", "null"] } }
+          }
+        }
+      }
+    },
+
+    "journal_impact": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Generic impact metrics block.",
+      "properties": {
+        "impact_factor": { "type": ["number", "null"] },
+        "cite_score": { "type": ["number", "null"] },
+        "other": { "type": ["object", "null"], "additionalProperties": { "type": ["number", "null"] } }
+      }
+    }
+  }
+}
