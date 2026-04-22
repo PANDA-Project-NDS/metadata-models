@@ -1,16 +1,21 @@
 import os
+
+import logfire
 from dotenv import load_dotenv
+from pydantic_ai import Agent
+from pydantic_ai.models.ollama import OllamaModel
+from pydantic_ai.models.openrouter import OpenRouterModel
+from pydantic_ai.providers.openrouter import OpenRouterProvider
+
 from models.journal import (
     BasicInfoExtraction,
     PoliciesExtraction,
     FeesExtraction,
     PeopleMetricsExtraction
 )
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.models.openrouter import OpenRouterModel
-from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+logfire.configure()
+logfire.instrument_pydantic_ai()
 
 load_dotenv()
 
@@ -51,18 +56,14 @@ CRITICAL RULES:
 Read the context carefully and extract the data into the requested JSON schema.
 """
 
-if os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
+llm_model = None
+
+if os.getenv("OLLAMA_BASE_URL"):
+    llm_model = OllamaModel(os.getenv("OLLAMA_MODEL", ""))
+elif os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
     llm_model = OpenRouterModel(
         os.getenv("OPENROUTER_MODEL", ""),
         provider=OpenRouterProvider(api_key=os.getenv("OPENROUTER_API_KEY")),
-    )
-else:
-    llm_model = OpenAIChatModel(
-        'qwen/qwen3-1.7b',
-        provider=OpenAIProvider(
-            base_url='http://127.0.0.1:1234/v1',
-            api_key='local-dev'
-        )
     )
 
 basic_info_agent = Agent(
