@@ -11,154 +11,162 @@ SupportedCurrency = Literal["USD", "EUR"]
 
 class Evidence(BaseModel):
     """Container for evidence supporting an extracted value."""
+    model_config = ConfigDict(extra="forbid")
     quote: str = Field(description="Verbatim sentence or fragment from the source text.")
     source: str = Field(description="Source identifier (file name, URL, or URI).")
 
-
-class Sourced(BaseModel, Generic[T]):
-    """A value paired with its supporting evidence."""
-    value: T
+class SourcedModel(BaseModel):
     evidence: Optional[Evidence] = Field(default=None, description="Evidence supporting this specific value.")
+
+class SourcedValue(SourcedModel, Generic[T]):
+    """A value paired with its supporting evidence."""
+    model_config = ConfigDict(extra="forbid")
+    value: T
 
 
 class PublicationFrequency(BaseModel):
     """Structured information about how often the journal is published."""
-    frequency: Optional[Sourced[str]] = Field(default=None,
-                                              description="Human readable frequency label (e.g., 'Monthly', 'Quarterly').")
-    issues_per_year: Optional[Sourced[int]] = Field(default=None,
-                                                    description="Exact number of issues per year when available.")
+    model_config = ConfigDict(extra="forbid")
+    frequency: Optional[SourcedValue[str]] = Field(default=None,
+                                                   description="Human readable frequency label (e.g., 'Monthly', 'Quarterly').")
+    issues_per_year: Optional[SourcedValue[int]] = Field(default=None,
+                                                         description="Exact number of issues per year when available.")
 
 
 class ReviewProcess(BaseModel):
     """Details regarding the peer review workflow and type."""
-    type: Optional[Sourced[Optional[Literal["single-blind", "double-blind", "open", "other"]]]] = Field(
+    model_config = ConfigDict(extra="forbid")
+    type: Optional[SourcedValue[Optional[Literal["single-blind", "double-blind", "open"]]]] = Field(
         default=None,
-        description="Canonical review type."
+        description="Canonical review type. Empty if usual types not applicable."
     )
-    description: Optional[Sourced[str]] = Field(default=None,
-                                                description="Freeform description of the review workflow.")
+    description: Optional[SourcedValue[str]] = Field(default=None,
+                                                     description="Freeform description of the review workflow.")
 
 
 class Membership(BaseModel):
     """Information about society or institutional membership models."""
-    type: Optional[Sourced[str]] = Field(default=None,
-                                         description="Membership type (e.g., 'society', 'institutional').")
-    details: Optional[Sourced[str]] = Field(default=None, description="Further membership details.")
-
-
-class ISSNRaw(BaseModel):
-    """Original raw ISSN values if canonical parsing fails."""
-    print: Optional[Sourced[str]] = Field(default=None, description="Original raw print ISSN.")
-    online: Optional[Sourced[str]] = Field(default=None, description="Original raw online ISSN.")
+    model_config = ConfigDict(extra="forbid")
+    type: Optional[SourcedValue[str]] = Field(default=None,
+                                              description="Membership type (e.g., 'society', 'institutional').")
+    details: Optional[SourcedValue[str]] = Field(default=None, description="Further membership details.")
 
 
 class ISSN(BaseModel):
     """International Standard Serial Number identifiers."""
-    print: Optional[Sourced[str]] = Field(default=None, description="Print ISSN in NNNN-NNNN form.")
-    online: Optional[Sourced[str]] = Field(default=None, description="Online ISSN in NNNN-NNNN form.")
-    raw: Optional[ISSNRaw] = Field(default=None, description="Raw values for reference.")
+    print: Optional[SourcedValue[str]] = Field(default=None, description="Print ISSN in NNNN-NNNN form.")
+    online: Optional[SourcedValue[str]] = Field(default=None, description="Online ISSN in NNNN-NNNN form.")
 
     @field_validator("print", "online")
     @classmethod
-    def validate_issn_format(cls, v: Optional[Sourced[str]]) -> Optional[Sourced[str]]:
+    def validate_issn_format(cls, v: Optional[SourcedValue[str]]) -> Optional[SourcedValue[str]]:
         if v is not None and v.value is not None:
             if not re.match(r"^\d{4}-\d{3}[\dX]$", v.value):
                 raise ValueError("ISSN must follow the NNNN-NNNN format")
         return v
 
 
-class Fee(BaseModel):
+class Fee(SourcedModel):
     """Numeric fee amount and its associated currency."""
-    amount: Optional[Sourced[float]] = Field(default=None, description="Numeric fee value.")
-    currency: Optional[Sourced[SupportedCurrency]] = Field(default=None,
-                                                           description="ISO 4217 currency code (USD or EUR).")
-
+    model_config = ConfigDict(extra="forbid")
+    amount: Optional[float] = Field(default=None, description="Numeric fee value.")
+    currency: Optional[SupportedCurrency] = Field(default=None,
+                                                           description="ISO 4217 currency code. USD and EUR only.")
 
 class APC(BaseModel):
     """Article Processing Charge details for a specific category or article type."""
-    article_type: Optional[Sourced[str]] = Field(default=None, description="Article type this fee applies to.")
-    category: Optional[Sourced[str]] = Field(default=None,
-                                             description="Optional category label (e.g., Frontiers-style categories).")
+    model_config = ConfigDict(extra="forbid")
+    article_type: Optional[SourcedValue[str]] = Field(default=None, description="Article type this fee applies to.")
+    category: Optional[SourcedValue[str]] = Field(default=None,
+                                                  description="Optional category label (e.g., Frontiers-style categories).")
     fee: Optional[Fee] = Field(default=None, description="Parsed numeric fee.")
-    raw: Optional[Sourced[str]] = Field(default=None, description="Original textual fee value as found in the source.")
-    description: Optional[Sourced[str]] = Field(default=None, description="Human-readable notes about the fee.")
-    regular_fee: Optional[Sourced[str]] = Field(default=None, description="Table-specific field for regular pricing.")
-    footnote: Optional[Sourced[str]] = Field(default=None, description="Footnote text associated with the fee entry.")
+    description: Optional[SourcedValue[str]] = Field(default=None, description="Human-readable notes about the fee.")
 
 
-class Discount(BaseModel):
+class Discount(SourcedModel):
     """Information about waivers or discounts available for publication fees."""
-    type: Optional[Sourced[str]] = Field(default=None, description="Discount type label.")
+    model_config = ConfigDict(extra="forbid")
+    type: Optional[str] = Field(default=None, description="Discount type label.")
     amount: Optional[Fee] = Field(default=None, description="Numeric discount amount.")
-    eligibility: Optional[Sourced[str]] = Field(default=None, description="Criteria for discount eligibility.")
-    raw: Optional[Sourced[str]] = Field(default=None, description="Original textual discount description.")
+    eligibility: Optional[str] = Field(default=None, description="Criteria for discount eligibility.")
 
 
-class ArticleType(BaseModel):
+class ArticleType(SourcedModel):
     """Definition of an article type supported by the journal."""
-    type: Sourced[str] = Field(..., description="The name of the article type.")
-    notes: Optional[Sourced[str]] = Field(default=None, description="Optional supplementary notes.")
+    model_config = ConfigDict(extra="forbid")
+    type: str = Field(..., description="The name of the article type.")
+    notes: Optional[str] = Field(default=None, description="Optional supplementary notes.")
 
 
-class Editor(BaseModel):
+class Editor(SourcedModel):
     """Member of the journal's editorial board."""
-    name: Sourced[str] = Field(..., description="Full name of the editor.")
-    role: Optional[Sourced[str]] = Field(default=None, description="Role or title (e.g., 'Editor-in-Chief').")
-    affiliations: Optional[List[Sourced[str]]] = Field(default_factory=list,
-                                                       description="List of institutional affiliations.")
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., description="Full name of the editor.")
+    role: Optional[str] = Field(default=None, description="Role or title (e.g., 'Editor-in-Chief').")
+    affiliations: Optional[List[str]] = Field(default_factory=list,
+                                                            description="List of institutional affiliations.")
 
 
 class AdditionalInformation(BaseModel):
     """Publisher-specific metadata and policy statements."""
-    open_access_statement: Optional[Sourced[str]] = Field(default=None, description="Open access policy statement.")
-    copyright_statement: Optional[Sourced[str]] = Field(default=None, description="Copyright and licensing statement.")
-    quality_assurance: Optional[Sourced[str]] = Field(default=None,
-                                                      description="Notes on quality assurance or peer review standards.")
-    other: Optional[List[Sourced[str]]] = Field(default_factory=list,
-                                                description="Other minor publisher-specific fields.")
+    model_config = ConfigDict(extra="forbid")
 
+    open_access_statement: Optional[SourcedValue[str]] = Field(default=None, description="Open access policy statement.")
+    copyright_statement: Optional[SourcedValue[str]] = Field(default=None, description="Copyright and licensing statement.")
+    quality_assurance: Optional[SourcedValue[str]] = Field(default=None,
+                                                           description="Notes on quality assurance or peer review standards.")
 
 class ImpactMetrics(BaseModel):
     """Quantifiable journal metrics."""
-    cite_score: Optional[Sourced[float]] = Field(default=None, description="CiteScore metric.")
-    impact_factor: Optional[Sourced[float]] = Field(default=None, description="Impact Factor metric.")
-    other: Optional[List[Sourced[float]]] = Field(default_factory=list, description="Other numeric impact metrics.")
+    model_config = ConfigDict(extra="forbid")
+
+    cite_score: Optional[SourcedValue[float]] = Field(default=None, description="CiteScore metric.")
+    impact_factor: Optional[SourcedValue[float]] = Field(default=None, description="Impact Factor metric.")
 
 
 class Facts(BaseModel):
     """Brief metadata summary, often found in 'Journal Facts' sidebars."""
-    short_name: Optional[Sourced[str]] = Field(default=None, description="Shortened journal name.")
-    abbreviation: Optional[Sourced[str]] = Field(default=None, description="Journal abbreviation.")
-    indexed_in: Optional[Sourced[str]] = Field(default=None, description="List of indexing services.")
-    impact: Optional[ImpactMetrics] = Field(default=None, description="Impact metrics associated with the facts block.")
+    model_config = ConfigDict(extra="forbid")
+
+    short_name: Optional[SourcedValue[str]] = Field(default=None, description="Shortened journal name.")
+    abbreviation: Optional[SourcedValue[str]] = Field(default=None, description="Journal abbreviation.")
+    indexed_in: Optional[SourcedValue[str]] = Field(default=None, description="Indexing service.")
 
 
 # --- Modular Domain Blocks ---
 
 class JournalIdentity(BaseModel):
     """Core identification for the journal."""
-    title: Optional[Sourced[str]] = Field(default=None, description="Canonical journal title.")
-    publisher: Optional[Sourced[str]] = Field(default=None, description="Publisher name.")
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[SourcedValue[str]] = Field(default=None, description="Canonical journal title.")
+    publisher: Optional[SourcedValue[str]] = Field(default=None, description="Publisher name.")
     issn: Optional[ISSN] = Field(default=None, description="ISSN identifiers.")
 
 
 class JournalScope(BaseModel):
     """Information about the journal's focus and sections."""
-    description: Optional[Sourced[str]] = Field(default=None, description="Prose summary of focus and scope.")
-    mission_scope: Optional[Sourced[str]] = Field(default=None, description="Concise mission and scope summary.")
-    journal_sections: Optional[List[Sourced[str]]] = Field(default_factory=list,
-                                                           description="Sections within the journal.")
+    model_config = ConfigDict(extra="forbid")
+
+    description: Optional[SourcedValue[str]] = Field(default=None, description="Prose summary of focus and scope.")
+    journal_sections: Optional[List[SourcedValue[str]]] = Field(default_factory=list,
+                                                                description="Sections within the journal.")
 
 
 class SubmissionInfo(BaseModel):
     """Details regarding article submissions."""
-    submission_guidelines: Optional[Sourced[str]] = Field(default=None, description="Full submission guidelines text.")
+    model_config = ConfigDict(extra="forbid")
+
+    submission_guidelines: Optional[SourcedValue[str]] = Field(default=None, description="Full submission guidelines text.")
     article_types: Optional[List[ArticleType]] = Field(default_factory=list,
                                                        description="List of supported article types.")
 
 
 class ReviewAndPolicy(BaseModel):
     """Peer review workflow and additional publisher policies."""
+    model_config = ConfigDict(extra="forbid")
+
     review_process: Optional[ReviewProcess] = Field(default=None, description="Review workflow details.")
     additional_information: Optional[AdditionalInformation] = Field(default=None,
                                                                     description="Publisher-specific policy details.")
@@ -166,6 +174,8 @@ class ReviewAndPolicy(BaseModel):
 
 class Pricing(BaseModel):
     """Article processing charges and discounts."""
+    model_config = ConfigDict(extra="forbid")
+
     article_processing_charges: Optional[List[APC]] = Field(default_factory=list,
                                                             description="Article Processing Charges.")
     discounts: Optional[List[Discount]] = Field(default_factory=list, description="Waivers and discounts.")
@@ -173,6 +183,8 @@ class Pricing(BaseModel):
 
 class Editorial(BaseModel):
     """Editorial board and staff."""
+    model_config = ConfigDict(extra="forbid")
+
     editors: Optional[List[Editor]] = Field(default_factory=list, description="Editorial board members.")
 
 
@@ -180,13 +192,17 @@ class Editorial(BaseModel):
 
 class BasicInfoExtraction(BaseModel):
     """Pass 1: Extracts basic journal information, scope, and identifiers."""
+    model_config = ConfigDict(extra="forbid")
+
     identity: Optional[JournalIdentity] = Field(default=None)
     scope: Optional[JournalScope] = Field(default=None)
     facts: Optional[Facts] = Field(default=None)
-
+    metrics: Optional[ImpactMetrics] = Field(default=None, description="Impact metrics")
 
 class PoliciesExtraction(BaseModel):
     """Pass 2: Extracts publication frequency, submission guidelines, and review policies."""
+    model_config = ConfigDict(extra="forbid")
+
     publication_frequency: Optional[PublicationFrequency] = Field(default=None)
     submissions: Optional[SubmissionInfo] = Field(default=None)
     policies: Optional[ReviewAndPolicy] = Field(default=None)
@@ -194,26 +210,24 @@ class PoliciesExtraction(BaseModel):
 
 class FeesExtraction(BaseModel):
     """Pass 3: Extracts fees, APCs, discounts, and membership information."""
+    model_config = ConfigDict(extra="forbid")
+
     pricing: Optional[Pricing] = Field(default=None)
     membership: Optional[Membership] = Field(default=None)
 
 
-class PeopleMetricsExtraction(BaseModel):
-    """Pass 4: Extracts editorial board members and impact metrics."""
+class PeopleExtraction(BaseModel):
+    """Pass 4: Extracts editorial board members."""
+    model_config = ConfigDict(extra="forbid")
+
     editorial: Optional[Editorial] = Field(default=None)
-    metrics: Optional[ImpactMetrics] = Field(default=None)
 
 
 # --- Final Schema ---
 
-class JournalMetadata(BaseModel):
+class JournalMetadata(BasicInfoExtraction, PoliciesExtraction, FeesExtraction, PeopleExtraction):
     """
     Canonical journal metadata schema.
     Composed of multiple modular sub-schemas for targeted extraction passes.
     """
     model_config = ConfigDict(title="JournalMetadata")
-
-    basic_info: BasicInfoExtraction
-    policies: PoliciesExtraction
-    fees: FeesExtraction
-    people_metrics: PeopleMetricsExtraction
