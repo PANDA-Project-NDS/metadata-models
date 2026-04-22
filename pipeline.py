@@ -113,10 +113,10 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
 
     # Merge into Final Schema
     final_metadata = JournalMetadata(
-        **basic_data,
-        **policy_data,
-        **fees_data,
-        **people_data
+        **basic_data.model_dump(),
+        **policy_data.model_dump(),
+        **fees_data.model_dump(),
+        **people_data.model_dump()
     )
 
     return final_metadata
