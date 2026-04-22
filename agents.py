@@ -11,7 +11,7 @@ from models.journal import (
     BasicInfoExtraction,
     PoliciesExtraction,
     FeesExtraction,
-    PeopleMetricsExtraction
+    PeopleExtraction
 )
 
 logfire.configure()
@@ -24,7 +24,8 @@ load_dotenv()
 EXTRACTION_QUERIES = {
     "basic_info": [
         "Journal title, publisher, about this journal, mission, scope, sections",
-        "ISSN, print ISSN, online ISSN, indexed in, abstracting and indexing databases"
+        "ISSN, print ISSN, online ISSN, indexed in, abstracting and indexing databases",
+        "Impact factor, journal metrics, citation score, cite score",
     ],
     "policies_submissions": [
         "Publication frequency, issues per year, submission guidelines, author instructions, article types accepted",
@@ -34,8 +35,7 @@ EXTRACTION_QUERIES = {
         "Article Processing Charge, APC, publication fees, cost, waivers, discounts, society membership, institutional membership"
     ],
     "people_metrics": [
-        "Editorial board, Editor in Chief, managing editor, editorial team",
-        "Impact factor, journal metrics, citation score, cite score"
+        "Editorial board, Editor in Chief, managing editor, editorial team"
     ]
 }
 
@@ -52,6 +52,7 @@ CRITICAL RULES:
    - Currencies MUST be 3-letter ISO codes (e.g., "USD", "EUR").
    - ISSNs MUST strictly follow the "NNNN-NNNN" format.
    - Review types must match the allowed canonical values.
+5. Always respond with a JSON object matching specified schema without returning extra json keys.
 
 Read the context carefully and extract the data into the requested JSON schema.
 """
@@ -69,23 +70,27 @@ elif os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
 basic_info_agent = Agent(
     model=llm_model,
     output_type=BasicInfoExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting basic information, scope, identifiers (ISSN), and facts."
+    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting basic information, scope, identifiers (ISSN), facts and metrics.",
+    output_retries=3
 )
 
 policies_agent = Agent(
     model=llm_model,
     output_type=PoliciesExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting publication frequency, submission guidelines, accepted article types, and review policies."
+    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting publication frequency, submission guidelines, accepted article types, and review policies.",
+    output_retries=3
 )
 
 fees_agent = Agent(
     model=llm_model,
     output_type=FeesExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting article processing charges (APCs), fee waivers, discounts, and society/institutional membership models."
+    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting article processing charges (APCs), fee waivers, discounts, and society/institutional membership models.",
+    output_retries=3
 )
 
-people_metrics_agent = Agent(
+people_agent = Agent(
     model=llm_model,
-    output_type=PeopleMetricsExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting editorial board members, their roles/affiliations, and journal impact metrics."
+    output_type=PeopleExtraction,
+    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting editorial board members, their roles/affiliations",
+    output_retries=3
 )

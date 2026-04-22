@@ -10,8 +10,9 @@ from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from pydantic_ai import ModelSettings
 
+
 from agents import (
-    basic_info_agent, policies_agent, fees_agent, people_metrics_agent,
+    basic_info_agent, policies_agent, fees_agent, people_agent,
     EXTRACTION_QUERIES
 )
 from models.journal import JournalMetadata
@@ -91,8 +92,8 @@ async def run_extraction_pass(index: VectorStoreIndex, agent, queries: List[str]
 
     prompt = f"Extract metadata using the following retrieved context:\n\n{context_str}"
 
-    result = await agent.run(prompt, model_settings=ModelSettings(timeout=600))
-    return result.data
+    result = await agent.run(prompt, model_settings=ModelSettings(timeout=300))
+    return result.output
 
 
 async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMetadata:
@@ -104,7 +105,7 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
     basic_task = run_extraction_pass(index, basic_info_agent, EXTRACTION_QUERIES["basic_info"], journal_id)
     policy_task = run_extraction_pass(index, policies_agent, EXTRACTION_QUERIES["policies_submissions"], journal_id)
     fees_task = run_extraction_pass(index, fees_agent, EXTRACTION_QUERIES["fees_membership"], journal_id)
-    people_task = run_extraction_pass(index, people_metrics_agent, EXTRACTION_QUERIES["people_metrics"], journal_id)
+    people_task = run_extraction_pass(index, people_agent, EXTRACTION_QUERIES["people_metrics"], journal_id)
 
     basic_data, policy_data, fees_data, people_data = await asyncio.gather(
         basic_task, policy_task, fees_task, people_task
@@ -112,10 +113,10 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
 
     # Merge into Final Schema
     final_metadata = JournalMetadata(
-        basic_info=basic_data,
-        policies=policy_data,
-        fees=fees_data,
-        people_metrics=people_data
+        **basic_data,
+        **policy_data,
+        **fees_data,
+        **people_data
     )
 
     return final_metadata
@@ -144,7 +145,7 @@ if __name__ == "__main__":
 
             # 2. Process each journal isolated by metadata filter
             results = {}
-            for j_id in all_journal_ids:
+            for j_id in list(all_journal_ids)[:5]:
                 metadata = await process_journal(global_index, j_id)
                 results[j_id] = json.loads(metadata.model_dump_json())
 
