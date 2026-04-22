@@ -9,11 +9,18 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from pydantic_ai import ModelSettings
+import trafilatura
+from llama_index.core import Document
+from pydantic import ValidationError
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 
 
 from agents import (
-    basic_info_agent, policies_agent, fees_agent, people_agent,
-    EXTRACTION_QUERIES
+    basic_info_agent,
+    policies_agent,
+    fees_agent,
+    people_agent,
+    EXTRACTION_QUERIES,
 )
 from models.journal import JournalMetadata
 
@@ -27,19 +34,46 @@ Settings.text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
+def load_with_trafilatura(directory_path: str) -> List[Document]:
+    """Loads HTML documents from a directory and extracts core text using Trafilatura."""
+    documents = []
+    for root, _, files in os.walk(directory_path):
+        for file in files:
+            if file.endswith((".html", ".htm")):
+                file_path = os.path.join(root, file)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    raw_html = f.read()
+
+                # Extract main content, fallback to raw HTML if trafilatura fails
+                extracted_text = trafilatura.extract(raw_html)
+                if not extracted_text:
+                    logger.warning(
+                        f"Trafilatura failed to extract text from {file_path}, using raw text."
+                    )
+                    extracted_text = raw_html
+
+                doc = Document(
+                    text=extracted_text,
+                    metadata={"file_path": file_path, "file_name": file},
+                )
+                documents.append(doc)
+    return documents
+
+
 def build_global_index(directory_path: str) -> VectorStoreIndex:
     """Loads all documents, injects journal_id metadata, and builds a global vector index."""
     logger.info(f"Building global index from: {directory_path}")
     if not os.path.exists(directory_path):
         raise FileNotFoundError(f"Directory not found: {directory_path}")
 
-    documents = SimpleDirectoryReader(directory_path).load_data()
+    # Use Trafilatura for better content extraction
+    documents = load_with_trafilatura(directory_path)
 
     # Inject journal_id metadata for filtering
     for doc in documents:
         filename = os.path.basename(doc.metadata.get("file_path", ""))
         # Heuristic: journal_alpha_apc.html -> journal_alpha
-        parts = filename.split('_')
+        parts = filename.split("_")
         if len(parts) >= 2:
             journal_id = f"{parts[0]}_{parts[1]}"
         else:
@@ -51,7 +85,9 @@ def build_global_index(directory_path: str) -> VectorStoreIndex:
     return index
 
 
-def retrieve_for_pass(index: VectorStoreIndex, queries: List[str], journal_id: str, top_k: int = 2) -> List:
+def retrieve_for_pass(
+    index: VectorStoreIndex, queries: List[str], journal_id: str, top_k: int = 2
+) -> List:
     """Performs targeted queries filtered by a specific journal_id."""
     # Apply metadata filter to restrict search to the target journal
     filters = MetadataFilters(
@@ -65,7 +101,7 @@ def retrieve_for_pass(index: VectorStoreIndex, queries: List[str], journal_id: s
         for node in nodes:
             unique_nodes[node.node.node_id] = node
 
-    return list(unique_nodes.values())
+    return list(unique_nodes.values())[:3]
 
 
 def assemble_context(nodes: List) -> str:
@@ -80,7 +116,9 @@ def assemble_context(nodes: List) -> str:
     return "\n".join(context_parts)
 
 
-async def run_extraction_pass(index: VectorStoreIndex, agent, queries: List[str], journal_id: str):
+async def run_extraction_pass(
+    index: VectorStoreIndex, agent, queries: List[str], journal_id: str
+):
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
     nodes = retrieve_for_pass(index, queries, journal_id)
@@ -92,8 +130,20 @@ async def run_extraction_pass(index: VectorStoreIndex, agent, queries: List[str]
 
     prompt = f"Extract metadata using the following retrieved context:\n\n{context_str}"
 
-    result = await agent.run(prompt, model_settings=ModelSettings(timeout=300))
-    return result.output
+    try:
+        result = await agent.run(prompt, model_settings=ModelSettings(timeout=300))
+        return result.output
+    except ValidationError as e:
+        logger.error(f"[{journal_id}] Validation error during extraction: {e}")
+    except UnexpectedModelBehavior as e:
+        logger.error(f"[{journal_id}] Unexpected model behavior during extraction: {e}")
+    except Exception as e:
+        logger.error(f"[{journal_id}] Unexpected error during extraction: {e}")
+
+    # Fallback to an empty instance of the expected schema
+    logger.warning(f"[{journal_id}] Returning empty fallback for failed extraction.")
+    # pydantic_ai stores the expected output schema in agent.result_type
+    return agent.result_type()
 
 
 async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMetadata:
@@ -102,10 +152,18 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
 
     logger.info(f"Starting multi-pass extraction for {journal_id}...")
 
-    basic_task = run_extraction_pass(index, basic_info_agent, EXTRACTION_QUERIES["basic_info"], journal_id)
-    policy_task = run_extraction_pass(index, policies_agent, EXTRACTION_QUERIES["policies_submissions"], journal_id)
-    fees_task = run_extraction_pass(index, fees_agent, EXTRACTION_QUERIES["fees_membership"], journal_id)
-    people_task = run_extraction_pass(index, people_agent, EXTRACTION_QUERIES["people_metrics"], journal_id)
+    basic_task = run_extraction_pass(
+        index, basic_info_agent, EXTRACTION_QUERIES["basic_info"], journal_id
+    )
+    policy_task = run_extraction_pass(
+        index, policies_agent, EXTRACTION_QUERIES["policies_submissions"], journal_id
+    )
+    fees_task = run_extraction_pass(
+        index, fees_agent, EXTRACTION_QUERIES["fees_membership"], journal_id
+    )
+    people_task = run_extraction_pass(
+        index, people_agent, EXTRACTION_QUERIES["people_metrics"], journal_id
+    )
 
     basic_data, policy_data, fees_data, people_data = await asyncio.gather(
         basic_task, policy_task, fees_task, people_task
@@ -116,7 +174,7 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
         **basic_data.model_dump(),
         **policy_data.model_dump(),
         **fees_data.model_dump(),
-        **people_data.model_dump()
+        **people_data.model_dump(),
     )
 
     return final_metadata
@@ -127,7 +185,6 @@ if __name__ == "__main__":
     import json
 
     journal_path = os.path.abspath("example_docs")
-
 
     async def main():
         try:
@@ -157,6 +214,5 @@ if __name__ == "__main__":
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
-
 
     asyncio.run(main())

@@ -9,4 +9,5 @@ dependencies = [
     "logfire>=4.32.1",
     "pydantic-ai>=1.84.1",
     "python-dotenv>=1.2.2",
+    "trafilatura>=2.0.0",
 ]
