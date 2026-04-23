@@ -4,16 +4,14 @@ import os
 from typing import List
 
 from llama_index.core import Settings
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+from llama_index.core import VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from pydantic_ai import ModelSettings
 import trafilatura
 from llama_index.core import Document
 from pydantic import ValidationError
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-
 
 from agents import (
     basic_info_agent,
@@ -23,6 +21,7 @@ from agents import (
     EXTRACTION_QUERIES,
 )
 from models.journal import JournalMetadata
+from search import assemble_context, retrieve_for_pass, JournalSearchDeps
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,53 +84,38 @@ def build_global_index(directory_path: str) -> VectorStoreIndex:
     return index
 
 
-def retrieve_for_pass(
-    index: VectorStoreIndex, queries: List[str], journal_id: str, top_k: int = 2
-) -> List:
-    """Performs targeted queries filtered by a specific journal_id."""
-    # Apply metadata filter to restrict search to the target journal
-    filters = MetadataFilters(
-        filters=[ExactMatchFilter(key="journal_id", value=journal_id)]
-    )
-    retriever = index.as_retriever(similarity_top_k=top_k, filters=filters)
-
-    unique_nodes = {}
-    for query in queries:
-        nodes = retriever.retrieve(query)
-        for node in nodes:
-            unique_nodes[node.node.node_id] = node
-
-    return list(unique_nodes.values())[:3]
-
-
-def assemble_context(nodes: List) -> str:
-    """Formats the retrieved nodes into a single context string with source citations."""
-    context_parts = []
-
-    for node in nodes:
-        source_file = node.node.metadata.get("file_name", "Unknown Source")
-        formatted_chunk = f"--- [Source: {source_file}] ---\n{node.node.text}\n"
-        context_parts.append(formatted_chunk)
-
-    return "\n".join(context_parts)
-
-
 async def run_extraction_pass(
     index: VectorStoreIndex, agent, queries: List[str], journal_id: str
 ):
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
-    nodes = retrieve_for_pass(index, queries, journal_id)
+    retrieval = retrieve_for_pass(index, queries, journal_id)
 
-    if not nodes:
-        logger.warning(f"[{journal_id}] No nodes retrieved for queries: {queries[:1]}")
+    if retrieval.is_empty:
+        if retrieval.failure_count == len(queries):
+            logger.error(f"[{journal_id}] All queries threw before returning results")
+        elif retrieval.empty_count == len(queries):
+            logger.warning(
+                f"[{journal_id}] All queries returned empty — no matching docs"
+            )
+        else:
+            logger.warning(
+                f"[{journal_id}] Retrieval partially failed — {retrieval.empty_count} empty, {retrieval.failure_count} errors"
+            )
+    elif retrieval.failure_count > 0:
+        logger.warning(
+            f"[{journal_id}] Retrieval partially failed — {retrieval.failure_count}/{len(queries)} queries errored"
+        )
 
-    context_str = assemble_context(nodes)
+    context_str = assemble_context(retrieval.nodes)
 
     prompt = f"Extract metadata using the following retrieved context:\n\n{context_str}"
 
     try:
-        result = await agent.run(prompt, model_settings=ModelSettings(timeout=300))
+        deps = JournalSearchDeps(index=index, journal_id=journal_id)
+        result = await agent.run(
+            prompt, deps=deps, model_settings=ModelSettings(timeout=300)
+        )
         return result.output
     except ValidationError as e:
         logger.error(f"[{journal_id}] Validation error during extraction: {e}")

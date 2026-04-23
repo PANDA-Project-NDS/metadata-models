@@ -11,8 +11,9 @@ from models.journal import (
     BasicInfoExtraction,
     PoliciesExtraction,
     FeesExtraction,
-    PeopleExtraction
+    PeopleExtraction,
 )
+from search import JournalSearchDeps, journal_search
 
 logfire.configure()
 logfire.instrument_pydantic_ai()
@@ -29,14 +30,14 @@ EXTRACTION_QUERIES = {
     ],
     "policies_submissions": [
         "Publication frequency, issues per year, submission guidelines, author instructions, article types accepted",
-        "Peer review process, blind review, open access policy statement, copyright, quality assurance"
+        "Peer review process, blind review, open access policy statement, copyright, quality assurance",
     ],
     "fees_membership": [
         "Article Processing Charge, APC, publication fees, cost, waivers, discounts, society membership, institutional membership"
     ],
     "people_metrics": [
         "Editorial board, Editor in Chief, managing editor, editorial team"
-    ]
+    ],
 }
 
 # --- Prompts & Agents ---
@@ -67,30 +68,51 @@ elif os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
         provider=OpenRouterProvider(api_key=os.getenv("OPENROUTER_API_KEY")),
     )
 
+FALLBACK_SYSTEM_HINT = (
+"If the provided context does not contain the information you need, call the `journal_search` tool to find more relevant "
+"documents about this journal. Use specific search terms related to the missing information."
+)
+
 basic_info_agent = Agent(
     model=llm_model,
     output_type=BasicInfoExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting basic information, scope, identifiers (ISSN), facts and metrics.",
-    output_retries=3
+    system_prompt=BASE_SYSTEM_PROMPT
+    + FALLBACK_SYSTEM_HINT
+    + "\nFocus purely on extracting basic information, scope, identifiers (ISSN), facts and metrics.",
+    output_retries=3,
+    deps_type=JournalSearchDeps,
+    tools=[journal_search],
 )
 
 policies_agent = Agent(
     model=llm_model,
     output_type=PoliciesExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting publication frequency, submission guidelines, accepted article types, and review policies.",
-    output_retries=3
+    system_prompt=BASE_SYSTEM_PROMPT
+    + FALLBACK_SYSTEM_HINT
+    + "\nFocus purely on extracting publication frequency, submission guidelines, accepted article types, and review policies.",
+    output_retries=3,
+    deps_type=JournalSearchDeps,
+    tools=[journal_search],
 )
 
 fees_agent = Agent(
     model=llm_model,
     output_type=FeesExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting article processing charges (APCs), fee waivers, discounts, and society/institutional membership models.",
-    output_retries=3
+    system_prompt=BASE_SYSTEM_PROMPT
+    + FALLBACK_SYSTEM_HINT
+    + "\nFocus purely on extracting article processing charges (APCs), fee waivers, discounts, and society/institutional membership models.",
+    output_retries=3,
+    deps_type=JournalSearchDeps,
+    tools=[journal_search],
 )
 
 people_agent = Agent(
     model=llm_model,
     output_type=PeopleExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT + "\nFocus purely on extracting editorial board members, their roles/affiliations",
-    output_retries=3
+    system_prompt=BASE_SYSTEM_PROMPT
+    + FALLBACK_SYSTEM_HINT
+    + "\nFocus purely on extracting editorial board members, their roles/affiliations",
+    output_retries=3,
+    deps_type=JournalSearchDeps,
+    tools=[journal_search],
 )
