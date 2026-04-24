@@ -72,7 +72,7 @@ def assemble_context(nodes: list[NodeWithScore]) -> str:
     context_parts = []
 
     for node in nodes:
-        source_file = node.node.metadata.get("file_name", "Unknown Source")
+        source_file = node.node.metadata.get("source_uri", "Unknown Source")
         formatted_chunk = f"--- [Source: {source_file}] ---\n{node.node.text}\n"
         context_parts.append(formatted_chunk)
 

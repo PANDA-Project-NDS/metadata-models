@@ -12,6 +12,7 @@ import trafilatura
 from llama_index.core import Document
 from pydantic import ValidationError
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pymongo import MongoClient
 
 from agents import (
     basic_info_agent,
@@ -28,7 +29,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- LlamaIndex Configuration ---
-Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
+Settings.embed_model = HuggingFaceEmbedding(model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"))
 Settings.text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 Settings.llm = None  # We handle the LLM via Pydantic AI
 
@@ -53,7 +54,7 @@ def load_with_trafilatura(directory_path: str) -> List[Document]:
 
                 doc = Document(
                     text=extracted_text,
-                    metadata={"file_path": file_path, "file_name": file},
+                    metadata={"file_path": file_path, "source_uri": file},
                 )
                 documents.append(doc)
     return documents
@@ -80,6 +81,44 @@ def build_global_index(directory_path: str) -> VectorStoreIndex:
         doc.metadata["journal_id"] = journal_id
         logger.info(f"Assigned journal_id '{journal_id}' to {filename}")
 
+    index = VectorStoreIndex.from_documents(documents)
+    return index
+
+
+def load_documents_from_mongo(collection) -> List[Document]:
+    """Load all documents with metadata.html field from MongoDB."""
+    documents = []
+    cursor = collection.find({"metadata.html": {"$exists": True, "$ne": None}})
+    for db_doc in cursor:
+        html_content = db_doc.get("metadata", {}).get("html", "")
+        if not html_content:
+            continue
+        extracted_text = trafilatura.extract(html_content)
+        if not extracted_text:
+            extracted_text = html_content
+        metadata = db_doc.get("metadata", {})
+        source_url = metadata.get("url", "unknown")
+        journal_id = metadata.get("title", "unknown")
+        doc = Document(
+            text=extracted_text,
+            metadata={
+                "file_path": source_url,
+                "source_uri": source_url,
+                "journal_id": journal_id,
+            },
+        )
+        documents.append(doc)
+    return documents
+
+
+def build_index_from_mongo() -> VectorStoreIndex:
+    """Build vector index from MongoDB documents."""
+    client = MongoClient(os.environ["MONGO_URI"], serverSelectionTimeoutMS=5000)
+    collection_name = os.environ.get("MONGO_COLLECTION", "wiley_full")
+    db = client.get_database()
+    collection = db[collection_name]
+    documents = load_documents_from_mongo(collection)
+    logger.info(f"Loaded {len(documents)} documents from MongoDB")
     index = VectorStoreIndex.from_documents(documents)
     return index
 
@@ -168,12 +207,15 @@ if __name__ == "__main__":
     import asyncio
     import json
 
-    journal_path = os.path.abspath("example_docs")
+    data_source = os.environ.get("DATA_SOURCE", "mongodb")
 
     async def main():
         try:
-            # 1. Build global index with metadata
-            global_index = build_global_index(journal_path)
+            if data_source == "mongodb":
+                global_index = build_index_from_mongo()
+            else:
+                journal_path = os.path.abspath("example_docs")
+                global_index = build_global_index(journal_path)
 
             # Extract unique journal IDs from the documents
             all_journal_ids = set(
@@ -184,7 +226,7 @@ if __name__ == "__main__":
 
             logger.info(f"Found journal IDs to process: {all_journal_ids}")
 
-            # 2. Process each journal isolated by metadata filter
+            # Process each journal isolated by metadata filter
             results = {}
             for j_id in list(all_journal_ids)[:5]:
                 metadata = await process_journal(global_index, j_id)
