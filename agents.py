@@ -15,7 +15,7 @@ from models.journal import (
 )
 from search import JournalSearchDeps, journal_search
 
-logfire.configure()
+logfire.configure(send_to_logfire='if-token-present')
 logfire.instrument_pydantic_ai()
 
 load_dotenv()
@@ -46,7 +46,7 @@ BASE_SYSTEM_PROMPT = """
 You are an expert data extraction assistant. Your task is to extract highly accurate, structured metadata for an academic journal based ONLY on the provided context chunks.
 
 CRITICAL RULES:
-1. NO HALLUCINATION: If a piece of information is not explicitly stated in the context, you MUST output null or an empty list. Do not guess or infer.
+1. NO HALLUCINATION: If a piece of information is not explicitly stated, you MUST output null or an empty list. Do not guess or infer.
 2. VERBATIM EVIDENCE: For every extracted value, you must provide the exact, verbatim quote from the text in the `quote` field. 
 3. SOURCE TRACKING: The context will be provided in blocks separated by "--- [Source: <filename>] ---". You MUST copy the exact <filename> into the `source` field for your evidence.
 4. STRICT FORMATTING: 
@@ -54,9 +54,20 @@ CRITICAL RULES:
    - ISSNs MUST strictly follow the "NNNN-NNNN" format.
    - Review types must match the allowed canonical values.
 5. Always respond with a JSON object matching specified schema without returning extra json keys.
-
-Read the context carefully and extract the data into the requested JSON schema.
 """
+
+SEARCH_FALLBACK_PROMPT = """
+Search Tool:
+- If the provided context does not contain the information you need, call the `journal_search` tool to find more relevant 
+documents about this journal.
+- Use only if the information is not present in the provided context. Do not use it if the information is already present.
+- Use it to fill the blanks, do not default to null output.
+- It only searches in documents related to the current journal.
+- Create a specific search query related to the missing information.
+- After calling the search tool, you will receive additional context chunks. Re-analyze all the context (previous + new) to extract the information.
+"""
+
+SYSTEM_PROMPT_FOOTER = "Read the context carefully and extract the data into the requested JSON schema."
 
 llm_model = None
 
@@ -68,16 +79,15 @@ elif os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
         provider=OpenRouterProvider(api_key=os.getenv("OPENROUTER_API_KEY")),
     )
 
-FALLBACK_SYSTEM_HINT = (
-"If the provided context does not contain the information you need, call the `journal_search` tool to find more relevant "
-"documents about this journal. Use specific search terms related to the missing information."
-)
+
 
 basic_info_agent = Agent(
+    name="Info Agent",
     model=llm_model,
     output_type=BasicInfoExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT
-    + FALLBACK_SYSTEM_HINT
+    instructions=BASE_SYSTEM_PROMPT
+    + SEARCH_FALLBACK_PROMPT
+    + SYSTEM_PROMPT_FOOTER
     + "\nFocus purely on extracting basic information, scope, identifiers (ISSN), facts and metrics.",
     output_retries=3,
     deps_type=JournalSearchDeps,
@@ -85,10 +95,12 @@ basic_info_agent = Agent(
 )
 
 policies_agent = Agent(
+    name="Policies Agent",
     model=llm_model,
     output_type=PoliciesExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT
-    + FALLBACK_SYSTEM_HINT
+    instructions=BASE_SYSTEM_PROMPT
+    + SEARCH_FALLBACK_PROMPT
+    + SYSTEM_PROMPT_FOOTER
     + "\nFocus purely on extracting publication frequency, submission guidelines, accepted article types, and review policies.",
     output_retries=3,
     deps_type=JournalSearchDeps,
@@ -96,10 +108,12 @@ policies_agent = Agent(
 )
 
 fees_agent = Agent(
+    name="Fees Agent",
     model=llm_model,
     output_type=FeesExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT
-    + FALLBACK_SYSTEM_HINT
+    instructions=BASE_SYSTEM_PROMPT
+    + SEARCH_FALLBACK_PROMPT
+    + SYSTEM_PROMPT_FOOTER
     + "\nFocus purely on extracting article processing charges (APCs), fee waivers, discounts, and society/institutional membership models.",
     output_retries=3,
     deps_type=JournalSearchDeps,
@@ -107,10 +121,12 @@ fees_agent = Agent(
 )
 
 people_agent = Agent(
+    name="People Agent",
     model=llm_model,
     output_type=PeopleExtraction,
-    system_prompt=BASE_SYSTEM_PROMPT
-    + FALLBACK_SYSTEM_HINT
+    instructions=BASE_SYSTEM_PROMPT
+    + SEARCH_FALLBACK_PROMPT
+    + SYSTEM_PROMPT_FOOTER
     + "\nFocus purely on extracting editorial board members, their roles/affiliations",
     output_retries=3,
     deps_type=JournalSearchDeps,

@@ -13,6 +13,7 @@ from llama_index.core import Document
 from pydantic import ValidationError
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pymongo import MongoClient
+from tqdm import tqdm
 
 from agents import (
     basic_info_agent,
@@ -29,7 +30,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- LlamaIndex Configuration ---
-Settings.embed_model = HuggingFaceEmbedding(model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"))
+Settings.embed_model = HuggingFaceEmbedding(
+    model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+)
 Settings.text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 Settings.llm = None  # We handle the LLM via Pydantic AI
 
@@ -86,10 +89,12 @@ def build_global_index(directory_path: str) -> VectorStoreIndex:
 
 
 def load_documents_from_mongo(collection) -> List[Document]:
-    """Load all documents with metadata.html field from MongoDB."""
+    """Load documents with metadata.html field from MongoDB."""
     documents = []
-    cursor = collection.find({"metadata.html": {"$exists": True, "$ne": None}})
-    for db_doc in cursor:
+    query = {"metadata.html": {"$exists": True, "$ne": None}}
+    for db_doc in tqdm(
+        collection.find(query).limit(20), desc="Loading from MongoDB"
+    ):
         html_content = db_doc.get("metadata", {}).get("html", "")
         if not html_content:
             continue
@@ -148,7 +153,7 @@ async def run_extraction_pass(
 
     context_str = assemble_context(retrieval.nodes)
 
-    prompt = f"Extract metadata using the following retrieved context:\n\n{context_str}"
+    prompt = f"Extract metadata from Journal '{journal_id}' using the following retrieved context:\n\n{context_str}"
 
     try:
         deps = JournalSearchDeps(index=index, journal_id=journal_id)
