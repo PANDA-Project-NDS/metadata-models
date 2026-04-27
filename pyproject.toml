@@ -10,5 +10,6 @@ dependencies = [
     "pydantic-ai>=1.84.1",
     "pymongo>=4.17.0",
     "python-dotenv>=1.2.2",
+    "tqdm>=4.67.3",
     "trafilatura>=2.0.0",
 ]

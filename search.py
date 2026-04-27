@@ -1,11 +1,11 @@
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass, field
 from typing import List
 
-from llama_index.core.indices.base import BaseIndex
 from llama_index.core.base.base_retriever import BaseRetriever
-from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
+from llama_index.core.indices.base import BaseIndex
 from llama_index.core.schema import NodeWithScore
+from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
 from pydantic_ai import RunContext
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ class JournalSearchDeps:
 
     index: BaseIndex
     journal_id: str
+    existing_node_ids: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -37,10 +38,10 @@ class RetrievalResult:
 
 
 def retrieve_for_pass(
-    index: object,
-    queries: List[str],
-    journal_id: str,
-    top_k: int = 2,
+        index: object,
+        queries: List[str],
+        journal_id: str,
+        top_k: int = 2,
 ) -> RetrievalResult:
     """Performs targeted queries filtered by journal_id, with per-query resilience."""
     retriever = build_retriever(index, journal_id, top_k)
@@ -72,8 +73,8 @@ def assemble_context(nodes: list[NodeWithScore]) -> str:
     context_parts = []
 
     for node in nodes:
-        source_file = node.node.metadata.get("source_uri", "Unknown Source")
-        formatted_chunk = f"--- [Source: {source_file}] ---\n{node.node.text}\n"
+        source = node.node.metadata.get("source_uri", "Unknown Source")
+        formatted_chunk = f"--- [Source: {source}] ---\n{node.node.text}\n"
         context_parts.append(formatted_chunk)
 
     return "\n".join(context_parts)
@@ -89,18 +90,25 @@ def build_retriever(index: BaseIndex, journal_id: str, top_k: int = 2) -> BaseRe
 
 async def journal_search(ctx: RunContext[JournalSearchDeps], query: str) -> str:
     """Search index for additional context scoped to the current journal.
+    Ignores results that were already in context.
 
-    Designed as a fallback search tool that agents can call when the initial
-    retrieval did not find relevant information.
+    Args:
+        query: The search query.
     """
     index = ctx.deps.index
     journal_id = ctx.deps.journal_id
 
+    logger.info(
+        f"Agent invoked journal_search with query: '{query}' for journal_id: '{journal_id}'"
+    )
     try:
-        nodes = build_retriever(index, journal_id).retrieve(query)
-        if not nodes:
+        results = build_retriever(index, journal_id).retrieve(query)
+        if not results:
             return "No results found for this query."
-        return assemble_context(nodes)
+        filtered_nodes = [n for n in results if n.node.node_id not in ctx.deps.existing_node_ids]
+        if not filtered_nodes:
+            return "Query gave no new results."
+        return assemble_context(filtered_nodes)
     except Exception:
         logger.exception("retrieval tool failed for query: %s", query)
         return "Search failed internally due to an error."

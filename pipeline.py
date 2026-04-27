@@ -3,14 +3,14 @@ import logging
 import os
 from typing import List
 
+import trafilatura
+from llama_index.core import Document
 from llama_index.core import Settings
 from llama_index.core import VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from pydantic import ValidationError, BaseModel
 from pydantic_ai import ModelSettings
-import trafilatura
-from llama_index.core import Document
-from pydantic import ValidationError
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pymongo import MongoClient
 from tqdm import tqdm
@@ -92,9 +92,7 @@ def load_documents_from_mongo(collection) -> List[Document]:
     """Load documents with metadata.html field from MongoDB."""
     documents = []
     query = {"metadata.html": {"$exists": True, "$ne": None}}
-    for db_doc in tqdm(
-        collection.find(query).limit(20), desc="Loading from MongoDB"
-    ):
+    for db_doc in tqdm(collection.find(query).limit(30), desc="Loading from MongoDB"):
         html_content = db_doc.get("metadata", {}).get("html", "")
         if not html_content:
             continue
@@ -129,8 +127,8 @@ def build_index_from_mongo() -> VectorStoreIndex:
 
 
 async def run_extraction_pass(
-    index: VectorStoreIndex, agent, queries: List[str], journal_id: str
-):
+        index: VectorStoreIndex, agent, queries: List[str], journal_id: str
+) -> BaseModel:
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
     retrieval = retrieve_for_pass(index, queries, journal_id)
@@ -152,11 +150,14 @@ async def run_extraction_pass(
         )
 
     context_str = assemble_context(retrieval.nodes)
+    existing_ids = set(n.node.node_id for n in retrieval.nodes)
 
     prompt = f"Extract metadata from Journal '{journal_id}' using the following retrieved context:\n\n{context_str}"
 
     try:
-        deps = JournalSearchDeps(index=index, journal_id=journal_id)
+        deps = JournalSearchDeps(
+            index=index, journal_id=journal_id, existing_node_ids=existing_ids
+        )
         result = await agent.run(
             prompt, deps=deps, model_settings=ModelSettings(timeout=300)
         )
@@ -171,7 +172,7 @@ async def run_extraction_pass(
     # Fallback to an empty instance of the expected schema
     logger.warning(f"[{journal_id}] Returning empty fallback for failed extraction.")
     # pydantic_ai stores the expected output schema in agent.result_type
-    return agent.result_type()
+    return agent.output_type
 
 
 async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMetadata:
@@ -214,6 +215,7 @@ if __name__ == "__main__":
 
     data_source = os.environ.get("DATA_SOURCE", "mongodb")
 
+
     async def main():
         try:
             if data_source == "mongodb":
@@ -245,5 +247,6 @@ if __name__ == "__main__":
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
+
 
     asyncio.run(main())

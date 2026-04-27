@@ -42,20 +42,6 @@ EXTRACTION_QUERIES = {
 
 # --- Prompts & Agents ---
 # Common system prompt base
-BASE_SYSTEM_PROMPT = """
-You are an expert data extraction assistant. Your task is to extract highly accurate, structured metadata for an academic journal based ONLY on the provided context chunks.
-
-CRITICAL RULES:
-1. NO HALLUCINATION: If a piece of information is not explicitly stated, you MUST output null or an empty list. Do not guess or infer.
-2. VERBATIM EVIDENCE: For every extracted value, you must provide the exact, verbatim quote from the text in the `quote` field. 
-3. SOURCE TRACKING: The context will be provided in blocks separated by "--- [Source: <filename>] ---". You MUST copy the exact <filename> into the `source` field for your evidence.
-4. STRICT FORMATTING: 
-   - Currencies MUST be 3-letter ISO codes (e.g., "USD", "EUR").
-   - ISSNs MUST strictly follow the "NNNN-NNNN" format.
-   - Review types must match the allowed canonical values.
-5. Always respond with a JSON object matching specified schema without returning extra json keys.
-"""
-
 SEARCH_FALLBACK_PROMPT = """
 Search Tool:
 - If the provided context does not contain the information you need, call the `journal_search` tool to find more relevant 
@@ -67,7 +53,19 @@ documents about this journal.
 - After calling the search tool, you will receive additional context chunks. Re-analyze all the context (previous + new) to extract the information.
 """
 
-SYSTEM_PROMPT_FOOTER = "Read the context carefully and extract the data into the requested JSON schema."
+SYSTEM_PROMPT = f"""
+You are an expert data extraction assistant. Your task is to extract highly accurate, structured metadata for an academic journal based ONLY on the provided context chunks.
+
+CRITICAL RULES:
+1. NO HALLUCINATION: If a piece of information is not explicitly stated, you MUST output null or an empty list. Do not guess or infer.
+2. VERBATIM EVIDENCE: For every extracted value, you must provide the exact, verbatim quote from the text in the `quote` field. 
+3. SOURCE TRACKING: The context will be provided in blocks separated by "--- [Source: <filename>] ---". You MUST copy the exact <filename> into the `source` field for your evidence.
+4. Always respond with a JSON object matching specified schema without returning extra json keys.
+
+{SEARCH_FALLBACK_PROMPT}
+
+Read the context carefully and extract the data into the requested JSON schema. Focus only on the fields present in the output schema.
+"""
 
 llm_model = None
 
@@ -79,16 +77,11 @@ elif os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
         provider=OpenRouterProvider(api_key=os.getenv("OPENROUTER_API_KEY")),
     )
 
-
-
 basic_info_agent = Agent(
     name="Info Agent",
     model=llm_model,
     output_type=BasicInfoExtraction,
-    instructions=BASE_SYSTEM_PROMPT
-    + SEARCH_FALLBACK_PROMPT
-    + SYSTEM_PROMPT_FOOTER
-    + "\nFocus purely on extracting basic information, scope, identifiers (ISSN), facts and metrics.",
+    instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
     tools=[journal_search],
@@ -98,10 +91,7 @@ policies_agent = Agent(
     name="Policies Agent",
     model=llm_model,
     output_type=PoliciesExtraction,
-    instructions=BASE_SYSTEM_PROMPT
-    + SEARCH_FALLBACK_PROMPT
-    + SYSTEM_PROMPT_FOOTER
-    + "\nFocus purely on extracting publication frequency, submission guidelines, accepted article types, and review policies.",
+    instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
     tools=[journal_search],
@@ -111,10 +101,7 @@ fees_agent = Agent(
     name="Fees Agent",
     model=llm_model,
     output_type=FeesExtraction,
-    instructions=BASE_SYSTEM_PROMPT
-    + SEARCH_FALLBACK_PROMPT
-    + SYSTEM_PROMPT_FOOTER
-    + "\nFocus purely on extracting article processing charges (APCs), fee waivers, discounts, and society/institutional membership models.",
+    instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
     tools=[journal_search],
@@ -124,10 +111,7 @@ people_agent = Agent(
     name="People Agent",
     model=llm_model,
     output_type=PeopleExtraction,
-    instructions=BASE_SYSTEM_PROMPT
-    + SEARCH_FALLBACK_PROMPT
-    + SYSTEM_PROMPT_FOOTER
-    + "\nFocus purely on extracting editorial board members, their roles/affiliations",
+    instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
     tools=[journal_search],
