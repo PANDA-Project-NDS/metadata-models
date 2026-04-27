@@ -12,8 +12,6 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from pydantic import ValidationError, BaseModel
 from pydantic_ai import ModelSettings
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pymongo import MongoClient
-from tqdm import tqdm
 
 from agents import (
     basic_info_agent,
@@ -37,97 +35,8 @@ Settings.text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
-def load_with_trafilatura(directory_path: str) -> List[Document]:
-    """Loads HTML documents from a directory and extracts core text using Trafilatura."""
-    documents = []
-    for root, _, files in os.walk(directory_path):
-        for file in files:
-            if file.endswith((".html", ".htm")):
-                file_path = os.path.join(root, file)
-                with open(file_path, "r", encoding="utf-8") as f:
-                    raw_html = f.read()
-
-                # Extract main content, fallback to raw HTML if trafilatura fails
-                extracted_text = trafilatura.extract(raw_html)
-                if not extracted_text:
-                    logger.warning(
-                        f"Trafilatura failed to extract text from {file_path}, using raw text."
-                    )
-                    extracted_text = raw_html
-
-                doc = Document(
-                    text=extracted_text,
-                    metadata={"file_path": file_path, "source_uri": file},
-                )
-                documents.append(doc)
-    return documents
-
-
-def build_global_index(directory_path: str) -> VectorStoreIndex:
-    """Loads all documents, injects journal_id metadata, and builds a global vector index."""
-    logger.info(f"Building global index from: {directory_path}")
-    if not os.path.exists(directory_path):
-        raise FileNotFoundError(f"Directory not found: {directory_path}")
-
-    # Use Trafilatura for better content extraction
-    documents = load_with_trafilatura(directory_path)
-
-    # Inject journal_id metadata for filtering
-    for doc in documents:
-        filename = os.path.basename(doc.metadata.get("file_path", ""))
-        # Heuristic: journal_alpha_apc.html -> journal_alpha
-        parts = filename.split("_")
-        if len(parts) >= 2:
-            journal_id = f"{parts[0]}_{parts[1]}"
-        else:
-            journal_id = "unknown"
-        doc.metadata["journal_id"] = journal_id
-        logger.info(f"Assigned journal_id '{journal_id}' to {filename}")
-
-    index = VectorStoreIndex.from_documents(documents)
-    return index
-
-
-def load_documents_from_mongo(collection) -> List[Document]:
-    """Load documents with metadata.html field from MongoDB."""
-    documents = []
-    query = {"metadata.html": {"$exists": True, "$ne": None}}
-    for db_doc in tqdm(collection.find(query).limit(30), desc="Loading from MongoDB"):
-        html_content = db_doc.get("metadata", {}).get("html", "")
-        if not html_content:
-            continue
-        extracted_text = trafilatura.extract(html_content)
-        if not extracted_text:
-            extracted_text = html_content
-        metadata = db_doc.get("metadata", {})
-        source_url = metadata.get("url", "unknown")
-        journal_id = metadata.get("title", "unknown")
-        doc = Document(
-            text=extracted_text,
-            metadata={
-                "file_path": source_url,
-                "source_uri": source_url,
-                "journal_id": journal_id,
-            },
-        )
-        documents.append(doc)
-    return documents
-
-
-def build_index_from_mongo() -> VectorStoreIndex:
-    """Build vector index from MongoDB documents."""
-    client = MongoClient(os.environ["MONGO_URI"], serverSelectionTimeoutMS=5000)
-    collection_name = os.environ.get("MONGO_COLLECTION", "wiley_full")
-    db = client.get_database()
-    collection = db[collection_name]
-    documents = load_documents_from_mongo(collection)
-    logger.info(f"Loaded {len(documents)} documents from MongoDB")
-    index = VectorStoreIndex.from_documents(documents)
-    return index
-
-
 async def run_extraction_pass(
-        index: VectorStoreIndex, agent, queries: List[str], journal_id: str
+    index: VectorStoreIndex, agent, queries: List[str], journal_id: str
 ) -> BaseModel:
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
@@ -213,40 +122,43 @@ if __name__ == "__main__":
     import asyncio
     import json
 
-    data_source = os.environ.get("DATA_SOURCE", "mongodb")
+    from db import MongoDBManager
 
+    data_source = os.environ.get("DATA_SOURCE", "mongodb")
 
     async def main():
         try:
-            if data_source == "mongodb":
-                global_index = build_index_from_mongo()
-            else:
-                journal_path = os.path.abspath("example_docs")
-                global_index = build_global_index(journal_path)
+            client = MongoDBManager(os.environ["MONGO_URI"])
+            try:
+                docs = client.load_source_documents(
+                    os.environ.get("MONGO_COLLECTION", "wiley_full"), limit=10
+                )
+                global_index = VectorStoreIndex.from_documents(docs)
 
-            # Extract unique journal IDs from the documents
-            all_journal_ids = set(
-                doc.metadata.get("journal_id")
-                for doc in global_index.docstore.docs.values()
-            )
-            all_journal_ids.discard("unknown")
+                # Extract unique journal IDs from the documents
+                all_journal_ids = set(
+                    doc.metadata.get("journal_id")
+                    for doc in global_index.docstore.docs.values()
+                )
+                all_journal_ids.discard("unknown")
 
-            logger.info(f"Found journal IDs to process: {all_journal_ids}")
+                logger.info(f"Found journal IDs to process: {all_journal_ids}")
 
-            # Process each journal isolated by metadata filter
-            results = {}
-            for j_id in list(all_journal_ids)[:5]:
-                metadata = await process_journal(global_index, j_id)
-                results[j_id] = json.loads(metadata.model_dump_json())
+                # Process each journal isolated by metadata filter
+                results = {}
+                for j_id in all_journal_ids:
+                    metadata = await process_journal(global_index, j_id)
+                    results[j_id] = json.loads(metadata.model_dump_json())
 
-            # Save all results
-            with open("extracted_metadata.json", "w") as f:
-                json.dump(results, f, indent=2)
-
-            logger.info("Extraction complete. Results saved to extracted_metadata.json")
+                # Save all results to MongoDB
+                client.save_metadata(
+                    os.environ.get("MONGO_METADATA_COLLECTION", "journal_metadata"),
+                    results,
+                )
+            finally:
+                client.close()
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
-
 
     asyncio.run(main())

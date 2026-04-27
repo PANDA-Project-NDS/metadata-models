@@ -60,7 +60,7 @@ CRITICAL RULES:
 1. NO HALLUCINATION: If a piece of information is not explicitly stated, you MUST output null or an empty list. Do not guess or infer.
 2. VERBATIM EVIDENCE: For every extracted value, you must provide the exact, verbatim quote from the text in the `quote` field. 
 3. SOURCE TRACKING: The context will be provided in blocks separated by "--- [Source: <filename>] ---". You MUST copy the exact <filename> into the `source` field for your evidence.
-4. Always respond with a JSON object matching specified schema without returning extra json keys.
+4. STRUCTURED OUTPUT: Always respond with JSON matching the schema specified by the `final_result` output tool without returning extra json keys.
 
 {SEARCH_FALLBACK_PROMPT}
 
