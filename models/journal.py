@@ -1,12 +1,10 @@
 import re
-from typing import List, Optional, TypeVar, Generic, Literal
+from typing import List, Optional, TypeVar, Generic
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
+from .vocab import *
 
 T = TypeVar("T")
-
-# Supported currency literals
-SupportedCurrency = Literal["USD", "EUR"]
 
 
 class Evidence(BaseModel):
@@ -33,15 +31,15 @@ class SourcedValue(SourcedModel, Generic[T]):
     value: T
 
 
-class PublicationFrequency(BaseModel):
+class PublicationFrequency(SourcedModel):
     """Structured information about how often the journal is published."""
 
     model_config = ConfigDict(extra="forbid")
-    frequency: Optional[SourcedValue[str]] = Field(
+    frequency: Optional[FrequencyLiteral] = Field(
         default=None,
         description="Human readable frequency label (e.g., 'Monthly', 'Quarterly').",
     )
-    issues_per_year: Optional[SourcedValue[int]] = Field(
+    issues_per_year: Optional[int] = Field(
         default=None, description="Exact number of issues per year when available."
     )
 
@@ -51,13 +49,14 @@ class ReviewProcess(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     type: Optional[
-        SourcedValue[Optional[Literal["single-blind", "double-blind", "open"]]]
+        SourcedValue[ReviewTypeLiteral]
     ] = Field(
         default=None,
         description="Canonical review type. Empty if usual types not applicable.",
     )
     description: Optional[SourcedValue[str]] = Field(
-        default=None, description="Freeform description of the review workflow."
+        default=None,
+        description="Summary of the review workflow.",
     )
 
 
@@ -65,7 +64,9 @@ class Membership(BaseModel):
     """Information about society or institutional membership models."""
 
     model_config = ConfigDict(extra="forbid")
-    type: Optional[SourcedValue[str]] = Field(
+    type: Optional[
+        SourcedValue[Literal["society", "institutional", "individual", "corporate"]]
+    ] = Field(
         default=None, description="Membership type (e.g., 'society', 'institutional')."
     )
     details: Optional[SourcedValue[str]] = Field(
@@ -99,37 +100,36 @@ class Fee(SourcedModel):
     """Numeric fee amount and its associated currency."""
 
     model_config = ConfigDict(extra="forbid")
-    amount: Optional[float] = Field(default=None, description="Numeric fee value.")
-    currency: Optional[SupportedCurrency] = Field(
+    amount: Optional[int] = Field(default=None, description="Numeric fee value.")
+    currency: Optional[SupportedCurrencyLiteral] = Field(
         default=None, description="ISO 4217 currency code. USD and EUR only."
     )
 
 
-class APC(BaseModel):
+class APC(SourcedModel):
     """Article Processing Charge details for a specific category or article type."""
 
     model_config = ConfigDict(extra="forbid")
-    article_type: Optional[SourcedValue[str]] = Field(
+    article_type: Optional[ArticleTypeLiteral] = Field(
         default=None, description="Article type this fee applies to."
     )
-    category: Optional[SourcedValue[str]] = Field(
+    category: Optional[str] = Field(
         default=None,
         description="Optional category label (e.g., Frontiers-style categories).",
     )
     fee: Optional[Fee] = Field(default=None, description="Parsed numeric fee.")
-    description: Optional[SourcedValue[str]] = Field(
-        default=None, description="Human-readable notes about the fee."
-    )
 
 
 class Discount(SourcedModel):
     """Information about waivers or discounts available for publication fees."""
 
     model_config = ConfigDict(extra="forbid")
-    type: Optional[str] = Field(default=None, description="Discount type label.")
+    type: Optional[Literal["waiver", "fixed", "percent"]] = Field(
+        default=None, description="Discount type label."
+    )
     amount: Optional[Fee] = Field(default=None, description="Numeric discount amount.")
     eligibility: Optional[str] = Field(
-        default=None, description="Criteria for discount eligibility."
+        default=None, description="Criteria for discount eligibility as stated."
     )
 
 
@@ -137,7 +137,7 @@ class ArticleType(SourcedModel):
     """Definition of an article type supported by the journal."""
 
     model_config = ConfigDict(extra="forbid")
-    type: str = Field(..., description="The name of the article type.")
+    type: ArticleTypeLiteral = Field(..., description="The name of the article type.")
     notes: Optional[str] = Field(
         default=None, description="Optional supplementary notes."
     )
@@ -149,7 +149,7 @@ class Editor(SourcedModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Full name of the editor.")
-    role: Optional[str] = Field(
+    role: Optional[EditorRoleLiteral] = Field(
         default=None, description="Role or title (e.g., 'Editor-in-Chief')."
     )
     affiliations: Optional[List[str]] = Field(
