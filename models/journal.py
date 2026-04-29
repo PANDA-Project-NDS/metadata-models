@@ -338,7 +338,7 @@ class EditorialExtraction(BaseModel):
 
 
 class JournalMetadata(
-    BasicInfoExtraction, PoliciesExtraction, FeesExtraction, EditorsExtraction
+    BasicInfoExtraction, PoliciesExtraction, FeesExtraction, EditorialExtraction
 ):
     """
     Canonical journal metadata schema.
