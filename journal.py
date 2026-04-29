@@ -183,7 +183,7 @@ class Editor(SourcedModel):
     role: Optional[str] = Field(
         default=None, description="Role or title as stated (e.g., 'Editor-in-Chief')."
     )
-    affiliations: Optional[List[str]] = Field(
+    affiliations: List[str] = Field(
         default_factory=list,
         description="List of institutional affiliations. Institute names, not locations.",
     )
@@ -232,8 +232,8 @@ class Facts(BaseModel):
     abbreviation: Optional[SourcedValue[str]] = Field(
         default=None, description="Journal abbreviation."
     )
-    indexed_in: Optional[List[IndexingService]] = Field(
-        default=None, description="Indexing services."
+    indexed_in: List[IndexingService] = Field(
+        default_factory=list, description="Indexing services."
     )
 
 
@@ -248,7 +248,7 @@ class SubmissionInfo(BaseModel):
     submission_guidelines: Optional[SourcedValue[str]] = Field(
         default=None, description="Full submission guidelines text."
     )
-    article_types: Optional[List[ArticleType]] = Field(
+    article_types: List[ArticleType] = Field(
         default_factory=list, description="List of supported article types."
     )
 
@@ -271,10 +271,10 @@ class Pricing(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    article_processing_charges: Optional[List[APC]] = Field(
+    article_processing_charges: List[APC] = Field(
         default_factory=list, description="Article Processing Charges."
     )
-    discounts: Optional[List[Discount]] = Field(
+    discounts: List[Discount] = Field(
         default_factory=list, description="Waivers and discounts."
     )
 
@@ -301,7 +301,8 @@ class BasicInfoExtraction(BaseModel):
 
 
 class PoliciesExtraction(BaseModel):
-    """Pass 2: Extracts publication frequency, submission guidelines, and review policies."""
+    """Pass 2: Extracts publication frequency, submission guidelines, and review policies, accepted languages and
+    open access criteria."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -329,7 +330,7 @@ class EditorialExtraction(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    editors: Optional[List[Editor]] = Field(
+    editors: List[Editor] = Field(
         default_factory=list, description="Editorial board members."
     )
 
