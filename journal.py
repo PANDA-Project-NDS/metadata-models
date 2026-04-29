@@ -278,17 +278,6 @@ class Pricing(BaseModel):
         default_factory=list, description="Waivers and discounts."
     )
 
-
-class Editorial(BaseModel):
-    """Editorial board and staff."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    editors: Optional[List[Editor]] = Field(
-        default_factory=list, description="Editorial board members."
-    )
-
-
 # --- Agent Extraction Targets ---
 
 
@@ -320,7 +309,7 @@ class PoliciesExtraction(BaseModel):
     submissions: Optional[SubmissionInfo] = Field(default=None)
     policies: Optional[ReviewAndPolicy] = Field(default=None)
     languages: Optional[SourcedValue[List[str]]] = Field(
-        default_factory=list,
+        default=None,
         description="ISO 639-2/T language codes (e.g., 'eng', 'fra', 'deu').",
     )
     diamond_open_access: Optional[DiamondOpenAccess] = Field(default=None)
@@ -335,19 +324,21 @@ class FeesExtraction(BaseModel):
     membership: Optional[Membership] = Field(default=None)
 
 
-class PeopleExtraction(BaseModel):
-    """Pass 4: Extracts editorial board members."""
+class EditorialExtraction(BaseModel):
+    """Pass 4: Extracts editorial board members and staff."""
 
     model_config = ConfigDict(extra="forbid")
 
-    editorial: Optional[Editorial] = Field(default=None)
+    editors: Optional[List[Editor]] = Field(
+        default_factory=list, description="Editorial board members."
+    )
 
 
 # --- Final Schema ---
 
 
 class JournalMetadata(
-    BasicInfoExtraction, PoliciesExtraction, FeesExtraction, PeopleExtraction
+    BasicInfoExtraction, PoliciesExtraction, FeesExtraction, EditorsExtraction
 ):
     """
     Canonical journal metadata schema.
