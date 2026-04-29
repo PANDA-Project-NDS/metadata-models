@@ -1,12 +1,34 @@
 import logging
+import os
+from typing import Iterator
 from typing import List
 
 import trafilatura
+import tqdm
 from llama_index.core import Document
+from llama_index.core import VectorStoreIndex
+from llama_index.vector_stores.mongodb import MongoDBAtlasVectorSearch
 from pymongo import MongoClient
 from pymongo.collection import Collection
 
 logger = logging.getLogger(__name__)
+
+
+def _make_ingestion_pipeline(
+    vector_store: MongoDBAtlasVectorSearch, embed_model_name: str
+):
+    """Create an IngestionPipeline with chunking and embedding transformations."""
+    from llama_index.core.ingestion import IngestionPipeline
+    from llama_index.core.node_parser import SentenceSplitter
+    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
+    return IngestionPipeline(
+        transformations=[
+            SentenceSplitter(chunk_size=512, chunk_overlap=50),
+            HuggingFaceEmbedding(model_name=embed_model_name),
+        ],
+        vector_store=vector_store,
+    )
 
 
 class MongoDBManager:
@@ -25,7 +47,9 @@ class MongoDBManager:
     def get_collection(self, name: str) -> Collection:
         return self.client.get_database()[name]
 
-    def load_source_documents(self, collection_name: str, limit: int = 0) -> List[Document]:
+    def load_source_documents(
+        self, collection_name: str, limit: int = 0
+    ) -> List[Document]:
         """Load source HTML documents from a MongoDB collection."""
         collection = self.get_collection(collection_name)
         query = {"metadata.html": {"$exists": True, "$ne": None}}
@@ -54,18 +78,136 @@ class MongoDBManager:
         )
         return documents
 
+    def stream_source_documents(
+        self, collection_name: str, limit: int = 0
+    ) -> Iterator[Document]:
+        """Yield Document objects from MongoDB without holding them all in memory.
+        Only yields documents that have metadata.html."""
+        collection = self.get_collection(collection_name)
+        cursor = collection.find(
+            {"metadata.html": {"$exists": True, "$ne": None}}
+        ).limit(limit)
+        for db_doc in cursor:
+            html_content = db_doc.get("metadata", {}).get("html", "")
+            if not html_content:
+                continue
+            extracted_text = trafilatura.extract(html_content)
+            if not extracted_text:
+                extracted_text = html_content
+            metadata = db_doc.get("metadata", {})
+            source_url = metadata.get("url", "unknown")
+            journal_id = metadata.get("title", "unknown")
+            yield Document(
+                text=extracted_text,
+                metadata={
+                    "file_path": source_url,
+                    "source_uri": source_url,
+                    "journal_id": journal_id,
+                },
+            )
+
+    def index_documents(
+        self,
+        input_collection: str,
+        output_collection: str | None = None,
+        limit: int = 0,
+        batch_size: int = 10,
+    ) -> VectorStoreIndex:
+        """Stream raw documents, chunk, embed, and persist into output_collection.
+        Processes in batches via IngestionPipeline."""
+        if output_collection is None:
+            output_collection = f"{input_collection}_index"
+
+        embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+
+        db = self.client.get_database()
+        vector_store = MongoDBAtlasVectorSearch(
+            mongodb_client=self.client,
+            db_name=db.name,
+            collection_name=output_collection,
+            vector_index_name="vector_index",
+        )
+        vector_store.create_index_if_not_exists()
+
+        ingestion = _make_ingestion_pipeline(vector_store, embed_model_name)
+
+        total_docs = self.get_collection(input_collection).count_documents(
+            {"metadata.html": {"$exists": True, "$ne": None}}
+        )
+        if limit:
+            total_docs = min(total_docs, limit)
+
+        doc_iter = self.stream_source_documents(input_collection, limit)
+        batch: List[Document] = []
+        indexed = 0
+        with tqdm.tqdm(
+            total=total_docs, desc=f"Indexing to '{output_collection}'"
+        ) as pbar:
+            for doc in doc_iter:
+                batch.append(doc)
+                if len(batch) >= batch_size:
+                    ingestion.run(documents=batch)
+                    indexed += len(batch)
+                    pbar.update(len(batch))
+                    batch = []
+            if batch:
+                ingestion.run(documents=batch)
+                indexed += len(batch)
+                pbar.update(len(batch))
+
+        logger.info(
+            f"Indexing complete. {indexed} documents processed into '{output_collection}'."
+        )
+        return VectorStoreIndex.from_vector_store(vector_store)
+
+    def load_vector_index(self, collection_name: str) -> VectorStoreIndex:
+        """Load a pre-existing vector index from MongoDB. No document embedding."""
+        db = self.client.get_database()
+        vector_store = MongoDBAtlasVectorSearch(
+            mongodb_client=self.client,
+            db_name=db.name,
+            collection_name=collection_name,
+            vector_index_name="vector_index",
+        )
+        return VectorStoreIndex.from_vector_store(vector_store)
+
+    def get_journal_ids(self, collection_name: str) -> List[str]:
+        """Get distinct journal IDs from the indexed collection via MongoDB query.
+        Queries metadata.journal_id from the vector store nodes."""
+        collection = self.get_collection(collection_name)
+        ids = collection.distinct("metadata.journal_id")
+        ids = [jid for jid in ids if jid and jid != "unknown"]
+        logger.info(
+            f"Found {len(ids)} journal IDs in collection '{collection_name}': {ids}"
+        )
+        return ids
+
     def save_metadata(self, collection_name: str, results: dict) -> int:
         """Save extracted journal metadata to MongoDB. Returns count saved."""
         collection = self.get_collection(collection_name)
         collection.create_index("journal_id", unique=True)
         saved = 0
         for journal_id, metadata in results.items():
-            collection.replace_one({"journal_id": journal_id}, {"journal_id": journal_id, **metadata}, upsert=True)
+            collection.replace_one(
+                {"journal_id": journal_id},
+                {"journal_id": journal_id, **metadata},
+                upsert=True,
+            )
             saved += 1
         logger.info(
             f"Saved {saved} journal metadata documents to MongoDB collection '{collection_name}'"
         )
         return saved
+
+    def save_metadata_one(self, collection_name: str, journal_id: str, metadata: dict):
+        """Save a single journal's metadata for streaming pipeline output."""
+        collection = self.get_collection(collection_name)
+        collection.create_index("journal_id", unique=True)
+        collection.replace_one(
+            {"journal_id": journal_id},
+            {"journal_id": journal_id, **metadata},
+            upsert=True,
+        )
 
     def close(self) -> None:
         if self._client:

@@ -3,11 +3,8 @@ import logging
 import os
 from typing import List
 
-import trafilatura
-from llama_index.core import Document
 from llama_index.core import Settings
 from llama_index.core import VectorStoreIndex
-from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from pydantic import ValidationError, BaseModel
 from pydantic_ai import ModelSettings
@@ -28,10 +25,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- LlamaIndex Configuration ---
+# Query-time embedding model (required for retrieval)
 Settings.embed_model = HuggingFaceEmbedding(
     model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 )
-Settings.text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
@@ -124,37 +121,35 @@ if __name__ == "__main__":
 
     from db import MongoDBManager
 
-    data_source = os.environ.get("DATA_SOURCE", "mongodb")
-
     async def main():
         try:
             client = MongoDBManager(os.environ["MONGO_URI"])
             try:
-                docs = client.load_source_documents(
-                    os.environ.get("MONGO_COLLECTION", "wiley_full"), limit=20
+                index_collection = os.environ.get(
+                    "MONGO_INDEX_COLLECTION",
+                    f"{os.environ.get('MONGO_COLLECTION', 'wiley_full')}_index",
                 )
-                global_index = VectorStoreIndex.from_documents(docs)
 
-                # Extract unique journal IDs from the documents
-                all_journal_ids = set(
-                    doc.metadata.get("journal_id")
-                    for doc in global_index.docstore.docs.values()
+                # Load pre-indexed vector store (no document embedding)
+                global_index = client.load_vector_index(index_collection)
+
+                # Query journal IDs from indexed collection
+                all_journal_ids = client.get_journal_ids(index_collection)
+                logger.info(f"Processing {len(all_journal_ids)} journals")
+
+                # Stream: process and save each journal immediately
+                metadata_collection = os.environ.get(
+                    "MONGO_METADATA_COLLECTION", "journal_metadata"
                 )
-                all_journal_ids.discard("unknown")
-
-                logger.info(f"Found journal IDs to process: {all_journal_ids}")
-
-                # Process each journal isolated by metadata filter
-                results = {}
                 for j_id in all_journal_ids:
                     metadata = await process_journal(global_index, j_id)
-                    results[j_id] = json.loads(metadata.model_dump_json())
+                    client.save_metadata_one(
+                        metadata_collection,
+                        j_id,
+                        json.loads(metadata.model_dump_json()),
+                    )
+                    logger.info(f"Saved metadata for {j_id}")
 
-                # Save all results to MongoDB
-                client.save_metadata(
-                    os.environ.get("MONGO_METADATA_COLLECTION", "journal_metadata"),
-                    results,
-                )
             finally:
                 client.close()
 
