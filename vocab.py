@@ -1,8 +1,8 @@
 from typing import Literal
 
-ReviewTypeLiteral = Literal["single-blind", "double-blind", "open-review"]
-SupportedCurrencyLiteral = Literal["USD", "EUR"]
-FrequencyLiteral = Literal[
+ReviewType = Literal["single-blind", "double-blind", "open-review"]
+SupportedCurrency = Literal["USD", "EUR"]
+Frequency = Literal[
     "Annually",
     "Semiannually",
     "Quarterly",
@@ -12,8 +12,7 @@ FrequencyLiteral = Literal[
     "Daily",
     "Irregular",
 ]
-
-ArticleTypeLiteral = Literal[
+ArticleTypeValue = Literal[
     "Research Article",
     "Review Article",
     "Brief Communication",
@@ -28,17 +27,20 @@ ArticleTypeLiteral = Literal[
     "Invited Paper",
     "Comment",
 ]
-
-EditorRoleLiteral = Literal[
-    "Editor-in-Chief",
-    "Editor",
-    "Associate Editor",
-    "Section Editor",
-    "Editorial Board Member",
-    "Past Editor-in-Chief",
-    "Honorary Editor",
-    "Advisory Editor",
-    "Guest Editor",
-    "Deputy Editor",
-    "Assistant Editor",
+IndexingService = Literal[
+    "Scopus",
+    "Web of Science",
+    "Google Scholar",
+    "Dimensions",
+    "PubMed",
+    "MEDLINE",
+    "Engineering Village",
+    "IEEE Xplore",
+    "Chemical Abstracts Service",
+    "PsycINFO",
+    "ERIC",
+    "DOAJ",
+    "Sherpa Romeo",
+    "OpenAlex",
+    "CrossRef",
 ]
