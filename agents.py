@@ -11,7 +11,7 @@ from models.journal import (
     BasicInfoExtraction,
     PoliciesExtraction,
     FeesExtraction,
-    PeopleExtraction,
+    EditorialExtraction,
 )
 from search import JournalSearchDeps, journal_search
 
@@ -31,11 +31,13 @@ EXTRACTION_QUERIES = {
     "policies_submissions": [
         "Publication frequency, issues per year, submission guidelines, author instructions, article types accepted",
         "Peer review process, blind review, open access policy statement, copyright, quality assurance",
+        "diamond open access, community owned, open to all authors",
+        "publication languages, languages accepted",
     ],
     "fees_membership": [
         "Article Processing Charge, APC, publication fees, cost, waivers, discounts, society membership, institutional membership"
     ],
-    "people_metrics": [
+    "editors": [
         "Editorial board, Editor in Chief, managing editor, editorial team"
     ],
 }
@@ -109,10 +111,10 @@ fees_agent = Agent(
     tools=[journal_search_tool],
 )
 
-people_agent = Agent(
-    name="People Agent",
+editors_agent = Agent(
+    name="Editors Agent",
     model=llm_model,
-    output_type=PeopleExtraction,
+    output_type=EditorialExtraction,
     instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,

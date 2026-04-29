@@ -17,7 +17,7 @@ from agents import (
     basic_info_agent,
     policies_agent,
     fees_agent,
-    people_agent,
+    editors_agent,
     EXTRACTION_QUERIES,
 )
 from models.journal import JournalMetadata
@@ -99,12 +99,12 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
     fees_task = run_extraction_pass(
         index, fees_agent, EXTRACTION_QUERIES["fees_membership"], journal_id
     )
-    people_task = run_extraction_pass(
-        index, people_agent, EXTRACTION_QUERIES["people_metrics"], journal_id
+    editors_task = run_extraction_pass(
+        index, editors_agent, EXTRACTION_QUERIES["editors"], journal_id
     )
 
-    basic_data, policy_data, fees_data, people_data = await asyncio.gather(
-        basic_task, policy_task, fees_task, people_task
+    basic_data, policy_data, fees_data, editors_data = await asyncio.gather(
+        basic_task, policy_task, fees_task, editors_task
     )
 
     # Merge into Final Schema
@@ -112,7 +112,7 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
         **basic_data.model_dump(),
         **policy_data.model_dump(),
         **fees_data.model_dump(),
-        **people_data.model_dump(),
+        **editors_data.model_dump(),
     )
 
     return final_metadata
@@ -131,7 +131,7 @@ if __name__ == "__main__":
             client = MongoDBManager(os.environ["MONGO_URI"])
             try:
                 docs = client.load_source_documents(
-                    os.environ.get("MONGO_COLLECTION", "wiley_full"), limit=10
+                    os.environ.get("MONGO_COLLECTION", "wiley_full"), limit=20
                 )
                 global_index = VectorStoreIndex.from_documents(docs)
 
