@@ -57,10 +57,10 @@ class MongoDBManager:
     def save_metadata(self, collection_name: str, results: dict) -> int:
         """Save extracted journal metadata to MongoDB. Returns count saved."""
         collection = self.get_collection(collection_name)
-        collection.create_index("_id", unique=True)
+        collection.create_index("journal_id", unique=True)
         saved = 0
         for journal_id, metadata in results.items():
-            collection.replace_one({"_id": journal_id}, metadata, upsert=True)
+            collection.replace_one({"journal_id": journal_id}, {"journal_id": journal_id, **metadata}, upsert=True)
             saved += 1
         logger.info(
             f"Saved {saved} journal metadata documents to MongoDB collection '{collection_name}'"

@@ -81,7 +81,7 @@ async def run_extraction_pass(
     # Fallback to an empty instance of the expected schema
     logger.warning(f"[{journal_id}] Returning empty fallback for failed extraction.")
     # pydantic_ai stores the expected output schema in agent.result_type
-    return agent.output_type
+    return agent.output_type()
 
 
 async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMetadata:
