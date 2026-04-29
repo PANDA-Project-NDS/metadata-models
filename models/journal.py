@@ -2,7 +2,13 @@ import re
 from typing import List, Optional, TypeVar, Generic, Literal
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from .vocab import Frequency, ReviewType, ArticleTypeValue, SupportedCurrency, IndexingService
+from .vocab import (
+    Frequency,
+    ReviewType,
+    ArticleTypeValue,
+    SupportedCurrency,
+    IndexingService,
+)
 
 T = TypeVar("T")
 
@@ -19,6 +25,7 @@ class Evidence(BaseModel):
 
 class SourcedModel(BaseModel):
     """Provide combined evidence for multiple values of a sub-object."""
+
     model_config = ConfigDict(extra="forbid")
     evidence: Optional[Evidence] = Field(
         default=None, description="Evidence supporting this specific value."
@@ -49,9 +56,7 @@ class ReviewProcess(BaseModel):
     """Details regarding the peer review workflow and type."""
 
     model_config = ConfigDict(extra="forbid")
-    type: Optional[
-        SourcedValue[ReviewType]
-    ] = Field(
+    type: Optional[SourcedValue[ReviewType]] = Field(
         default=None,
         description="Canonical review type. Null if not applicable.",
     )
@@ -72,6 +77,29 @@ class Membership(BaseModel):
     )
     details: Optional[SourcedValue[str]] = Field(
         default=None, description="Further membership details."
+    )
+
+
+class DiamondOpenAccess(SourcedModel):
+    """Criteria for diamond/platinum open access classification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scholarly_journal: Optional[bool] = Field(
+        default=None, description="Meets scholarly journal standards."
+    )
+    community_owned: Optional[bool] = Field(
+        default=None, description="Owned and governed by academic community."
+    )
+    open_access_with_open_licenses: Optional[bool] = Field(
+        default=None, description="Content is openly accessible under open licenses."
+    )
+    no_fees: Optional[bool] = Field(
+        default=None, description="No fees for authors or readers."
+    )
+    open_to_all_authors: Optional[bool] = Field(
+        default=None,
+        description="Accepts submissions from all eligible authors without restriction.",
     )
 
 
@@ -102,7 +130,9 @@ class MonetaryAmount(SourcedModel):
 
     model_config = ConfigDict(extra="forbid")
     value: int = Field(..., description="Numeric money value (rounded).")
-    currency: SupportedCurrency = Field(..., description="ISO 4217 currency code. USD and EUR only.")
+    currency: SupportedCurrency = Field(
+        ..., description="ISO 4217 currency code. USD and EUR only."
+    )
 
 
 class APC(SourcedModel):
@@ -126,7 +156,9 @@ class Discount(SourcedModel):
     type: Optional[Literal["waiver", "fixed", "percent"]] = Field(
         default=None, description="Discount type label."
     )
-    amount: Optional[MonetaryAmount] = Field(default=None, description="Fixed monetary discount amount if applicable.")
+    amount: Optional[MonetaryAmount] = Field(
+        default=None, description="Fixed monetary discount amount if applicable."
+    )
     eligibility: Optional[str] = Field(
         default=None, description="Criteria for discount eligibility as stated."
     )
@@ -152,7 +184,8 @@ class Editor(SourcedModel):
         default=None, description="Role or title as stated (e.g., 'Editor-in-Chief')."
     )
     affiliations: Optional[List[str]] = Field(
-        default_factory=list, description="List of institutional affiliations. Institute names, not locations."
+        default_factory=list,
+        description="List of institutional affiliations. Institute names, not locations.",
     )
 
 
@@ -183,7 +216,9 @@ class Metrics(BaseModel):
     impact_factor: Optional[SourcedValue[float]] = Field(
         default=None, description="Impact Factor metric."
     )
-    acceptance_rate: Optional[SourcedValue[float]] = Field(default=None, description="Acceptance rate in percent (e.g., 23.5)")
+    acceptance_rate: Optional[SourcedValue[float]] = Field(
+        default=None, description="Acceptance rate in percent (e.g., 23.5)"
+    )
 
 
 class Facts(BaseModel):
@@ -284,6 +319,11 @@ class PoliciesExtraction(BaseModel):
     publication_frequency: Optional[PublicationFrequency] = Field(default=None)
     submissions: Optional[SubmissionInfo] = Field(default=None)
     policies: Optional[ReviewAndPolicy] = Field(default=None)
+    languages: Optional[SourcedValue[List[str]]] = Field(
+        default_factory=list,
+        description="ISO 639-2/T language codes (e.g., 'eng', 'fra', 'deu').",
+    )
+    diamond_open_access: Optional[DiamondOpenAccess] = Field(default=None)
 
 
 class FeesExtraction(BaseModel):
@@ -315,3 +355,7 @@ class JournalMetadata(
     """
 
     model_config = ConfigDict(title="JournalMetadata")
+    journal_id: Optional[str] = Field(default=None, title="Journal ID")
+    uri: Optional[str] = Field(
+        default=None, description="Canonical journal homepage URI."
+    )
