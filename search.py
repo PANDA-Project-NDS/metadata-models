@@ -101,13 +101,17 @@ async def journal_search(ctx: RunContext[JournalSearchDeps], query: str) -> str:
     logger.info(
         f"Agent invoked journal_search with query: '{query}' for journal_id: '{journal_id}'"
     )
+    if ctx.usage.tool_calls >= 2:
+        return "Number of allowed searches exceeded. Please form the output."
     try:
         results = build_retriever(index, journal_id).retrieve(query)
         if not results:
             return "No results found for this query."
-        filtered_nodes = [n for n in results if n.node.node_id not in ctx.deps.existing_node_ids]
+        filtered_nodes = list(filter(lambda n: n.node.node_id not in ctx.deps.existing_node_ids, results))
         if not filtered_nodes:
             return "Query gave no new results."
+        # ignore current results on further searches
+        ctx.deps.existing_node_ids |= set([n.node.node_id for n in filtered_nodes])
         return assemble_context(filtered_nodes)
     except Exception:
         logger.exception("retrieval tool failed for query: %s", query)

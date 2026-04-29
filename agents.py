@@ -2,10 +2,10 @@ import os
 
 import logfire
 from dotenv import load_dotenv
-from pydantic_ai import Agent
-from pydantic_ai.models.ollama import OllamaModel
-from pydantic_ai.models.openrouter import OpenRouterModel
-from pydantic_ai.providers.openrouter import OpenRouterProvider
+from pydantic_ai import Agent, InlineDefsJsonSchemaTransformer, Tool
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.profiles.openai import OpenAIModelProfile
 
 from models.journal import (
     BasicInfoExtraction,
@@ -44,7 +44,7 @@ EXTRACTION_QUERIES = {
 # Common system prompt base
 SEARCH_FALLBACK_PROMPT = """
 Search Tool:
-- If the provided context does not contain the information you need, call the `journal_search` tool to find more relevant 
+- If the provided context does not contain the information you need, call the `Journal Search` tool to find more relevant 
 documents about this journal.
 - Use only if the information is not present in the provided context. Do not use it if the information is already present.
 - Use it to fill the blanks, do not default to null output.
@@ -67,15 +67,17 @@ CRITICAL RULES:
 Read the context carefully and extract the data into the requested JSON schema. Focus only on the fields present in the output schema.
 """
 
-llm_model = None
+llm_model = OpenAIChatModel(
+    os.getenv("OPENAI_MODEL", ""),
+    provider=OpenAIProvider(os.getenv("OPENAI_API_URL")),
+    #profile=OpenAIModelProfile(json_schema_transformer=InlineDefsJsonSchemaTransformer)
+)
 
-if os.getenv("OLLAMA_BASE_URL"):
-    llm_model = OllamaModel(os.getenv("OLLAMA_MODEL", ""))
-elif os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
-    llm_model = OpenRouterModel(
-        os.getenv("OPENROUTER_MODEL", ""),
-        provider=OpenRouterProvider(api_key=os.getenv("OPENROUTER_API_KEY")),
-    )
+journal_search_tool = Tool(
+    journal_search,
+    name="Journal Search",
+    max_retries=1,
+)
 
 basic_info_agent = Agent(
     name="Info Agent",
@@ -84,7 +86,7 @@ basic_info_agent = Agent(
     instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
-    tools=[journal_search],
+    tools=[journal_search_tool],
 )
 
 policies_agent = Agent(
@@ -94,7 +96,7 @@ policies_agent = Agent(
     instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
-    tools=[journal_search],
+    tools=[journal_search_tool],
 )
 
 fees_agent = Agent(
@@ -104,7 +106,7 @@ fees_agent = Agent(
     instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
-    tools=[journal_search],
+    tools=[journal_search_tool],
 )
 
 people_agent = Agent(
@@ -114,5 +116,5 @@ people_agent = Agent(
     instructions=SYSTEM_PROMPT,
     output_retries=3,
     deps_type=JournalSearchDeps,
-    tools=[journal_search],
+    tools=[journal_search_tool],
 )
