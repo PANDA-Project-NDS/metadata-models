@@ -1,7 +1,6 @@
 import os
 
 import logfire
-from dotenv import load_dotenv
 from pydantic_ai import Agent, InlineDefsJsonSchemaTransformer, Tool
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -18,7 +17,6 @@ from search import JournalSearchDeps, journal_search
 logfire.configure(send_to_logfire='if-token-present')
 logfire.instrument_pydantic_ai()
 
-load_dotenv()
 
 # --- Extraction Queries ---
 

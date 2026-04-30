@@ -1,3 +1,5 @@
+import itertools
+import json
 import logging
 import os
 from typing import Iterator
@@ -12,6 +14,39 @@ from pymongo import MongoClient
 from pymongo.collection import Collection
 
 logger = logging.getLogger(__name__)
+
+EXCEL_METADATA_FIELDS = [
+    ("Journal", "title"),
+    ("Subject", "subject_area"),
+    ("ISSN", "online_issn"),
+    ("Open access type", "open_access_type"),
+    ("License", "license_types_offered"),
+    ("APC", "full_price"),
+    ("Blocked", "blocked"),
+]
+
+
+def _serialize_excel_doc(db_doc: dict, collection_name: str) -> Document:
+    """Serialize a non-HTML (Excel/APC) document into a Document for embedding."""
+    m = db_doc.get("metadata", {})
+    parts = []
+    for label, key in EXCEL_METADATA_FIELDS:
+        val = m.get(key)
+        if val is not None and val != "":
+            parts.append(f"{label}: {json.dumps(val)}")
+    header = m.get("header_footer")
+    if header:
+        parts.append(header)
+    return Document(
+        text="\n".join(parts),
+        metadata={
+            "file_path": m.get("url", "unknown"),
+            "source_uri": m.get("url", "unknown"),
+            "journal_id": m.get("title", "unknown"),
+            "publisher": collection_name,
+            "scope": "excel",
+        },
+    )
 
 
 def _make_ingestion_pipeline(
@@ -108,8 +143,18 @@ class MongoDBManager:
                     "source_uri": source_url,
                     "journal_id": journal_id,
                     "publisher": collection_name,
+                    "scope": "html",
                 },
             )
+
+    def stream_excel_documents(
+        self, collection_name: str, limit: int = 0
+    ) -> Iterator[Document]:
+        """Yield Document objects from non-HTML (Excel/APC) documents in MongoDB."""
+        collection = self.get_collection(collection_name)
+        cursor = collection.find({"metadata.html": {"$exists": False}}).limit(limit)
+        for db_doc in cursor:
+            yield _serialize_excel_doc(db_doc, collection_name)
 
     def index_documents(
         self,
@@ -127,19 +172,23 @@ class MongoDBManager:
             vector_index_name="vector_index",
         )
         vector_store.create_vector_search_index(
-            dimensions=int(os.getenv("EMBEDDING_DIM", "768")),
+            dimensions=int(os.getenv("EMBEDDING_DIM", "384")),
             path="embedding",
             similarity="cosine",
         )
         ingestion = _make_ingestion_pipeline(vector_store, embed_model_name)
 
-        total_docs = self.get_collection(collection).count_documents(
+        src_coll = self.get_collection(collection)
+        total_docs = src_coll.count_documents(
             {"metadata.html": {"$exists": True, "$ne": None}}
-        )
+        ) + src_coll.count_documents({"metadata.html": {"$exists": False}})
         if limit:
-            total_docs = min(total_docs, limit)
+            total_docs = min(total_docs, limit * 2)
 
-        doc_iter = self.stream_source_documents(collection, limit)
+        doc_iter = itertools.chain(
+            self.stream_source_documents(collection, limit),
+            self.stream_excel_documents(collection, limit),
+        )
         batch: List[Document] = []
         indexed = 0
         with tqdm.tqdm(

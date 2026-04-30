@@ -20,6 +20,9 @@ from agents import (
 from models.journal import JournalMetadata
 from search import assemble_context, retrieve_for_pass, JournalSearchDeps
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -123,7 +126,7 @@ if __name__ == "__main__":
 
     async def main():
         try:
-            client = MongoDBManager(os.environ["MONGO_URI"])
+            client = MongoDBManager(os.environ["MONGODB_URI"])
             try:
                 # Load pre-indexed vector store (no document embedding)
                 global_index = client.load_vector_index()
