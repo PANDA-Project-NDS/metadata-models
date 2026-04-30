@@ -86,6 +86,10 @@ class MongoDBManager:
     def index_collection_name(self) -> str:
         return os.getenv("MONGO_INDEX_COLLECTION", "search_index")
 
+    @property
+    def db_name(self) -> str:
+        return os.getenv("MONGO_DB", "retrieve")
+
     def load_source_documents(
         self, collection_name: str, limit: int = 0
     ) -> List[Document]:
@@ -168,6 +172,7 @@ class MongoDBManager:
 
         vector_store = MongoDBAtlasVectorSearch(
             mongodb_client=self.client,
+            db_name=self.db_name,
             collection_name=self.index_collection_name,
             vector_index_name="vector_index",
         )
@@ -216,6 +221,7 @@ class MongoDBManager:
         """Load a pre-existing vector index from MongoDB. No document embedding."""
         vector_store = MongoDBAtlasVectorSearch(
             mongodb_client=self.client,
+            db_name=self.db_name,
             collection_name=self.index_collection_name,
             vector_index_name="vector_index",
         )
@@ -240,7 +246,7 @@ class MongoDBManager:
         for journal_id, metadata in results.items():
             collection.replace_one(
                 {"journal_id": journal_id},
-                {"journal_id": journal_id, **metadata},
+                {**metadata, "journal_id": journal_id},
                 upsert=True,
             )
             saved += 1
@@ -255,7 +261,7 @@ class MongoDBManager:
         collection.create_index("journal_id", unique=True)
         collection.replace_one(
             {"journal_id": journal_id},
-            {"journal_id": journal_id, **metadata},
+            {**metadata, "journal_id": journal_id},
             upsert=True,
         )
 
