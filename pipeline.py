@@ -125,16 +125,11 @@ if __name__ == "__main__":
         try:
             client = MongoDBManager(os.environ["MONGO_URI"])
             try:
-                index_collection = os.environ.get(
-                    "MONGO_INDEX_COLLECTION",
-                    f"{os.environ.get('MONGO_COLLECTION', 'wiley_full')}_index",
-                )
-
                 # Load pre-indexed vector store (no document embedding)
-                global_index = client.load_vector_index(index_collection)
+                global_index = client.load_vector_index()
 
                 # Query journal IDs from indexed collection
-                all_journal_ids = client.get_journal_ids(index_collection)
+                all_journal_ids = client.get_journal_ids()
                 logger.info(f"Processing {len(all_journal_ids)} journals")
 
                 # Stream: process and save each journal immediately

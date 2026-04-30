@@ -28,25 +28,21 @@ def main():
     )
     args = parser.parse_args()
 
-    input_collection = os.environ.get("MONGO_COLLECTION", "wiley_full")
-    output_collection = os.environ.get(
-        "MONGO_INDEX_COLLECTION", f"{input_collection}_index"
-    )
+    collection_name = os.environ.get("MONGO_COLLECTION", "wiley_full")
 
     client = MongoDBManager(os.environ["MONGO_URI"])
     try:
         if args.force_rebuild:
-            client.get_collection(output_collection).drop()
-            logger.info(f"Dropped existing collection '{output_collection}'")
+            client.get_collection(client.index_collection_name).drop()
+            logger.info(f"Dropped existing collection '{client.index_collection_name}'")
 
         client.index_documents(
-            input_collection,
-            output_collection,
+            collection_name,
             limit=args.limit,
             batch_size=args.batch_size,
         )
 
-        journal_ids = client.get_journal_ids(output_collection)
+        journal_ids = client.get_journal_ids()
         logger.info(f"Indexed {len(journal_ids)} journals: {journal_ids}")
     finally:
         client.close()

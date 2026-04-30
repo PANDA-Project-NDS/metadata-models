@@ -47,6 +47,10 @@ class MongoDBManager:
     def get_collection(self, name: str) -> Collection:
         return self.client.get_database()[name]
 
+    @property
+    def index_collection_name(self) -> str:
+        return os.getenv("MONGO_INDEX_COLLECTION", "search_index")
+
     def load_source_documents(
         self, collection_name: str, limit: int = 0
     ) -> List[Document]:
@@ -103,45 +107,44 @@ class MongoDBManager:
                     "file_path": source_url,
                     "source_uri": source_url,
                     "journal_id": journal_id,
+                    "publisher": collection_name,
                 },
             )
 
     def index_documents(
         self,
-        input_collection: str,
-        output_collection: str | None = None,
+        collection: str,
         limit: int = 0,
         batch_size: int = 10,
     ) -> VectorStoreIndex:
-        """Stream raw documents, chunk, embed, and persist into output_collection.
+        """Stream raw documents, chunk, embed, and persist into the search_index collection.
         Processes in batches via IngestionPipeline."""
-        if output_collection is None:
-            output_collection = f"{input_collection}_index"
-
         embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 
-        db = self.client.get_database()
         vector_store = MongoDBAtlasVectorSearch(
             mongodb_client=self.client,
-            db_name=db.name,
-            collection_name=output_collection,
+            collection_name=self.index_collection_name,
             vector_index_name="vector_index",
         )
-        vector_store.create_index_if_not_exists()
-
+        vector_store.create_vector_search_index(
+            dimensions=int(os.getenv("EMBEDDING_DIM", "768")),
+            path="embedding",
+            similarity="cosine",
+        )
         ingestion = _make_ingestion_pipeline(vector_store, embed_model_name)
 
-        total_docs = self.get_collection(input_collection).count_documents(
+        total_docs = self.get_collection(collection).count_documents(
             {"metadata.html": {"$exists": True, "$ne": None}}
         )
         if limit:
             total_docs = min(total_docs, limit)
 
-        doc_iter = self.stream_source_documents(input_collection, limit)
+        doc_iter = self.stream_source_documents(collection, limit)
         batch: List[Document] = []
         indexed = 0
         with tqdm.tqdm(
-            total=total_docs, desc=f"Indexing to '{output_collection}'"
+            total=total_docs,
+            desc=f"Indexing to '{self.index_collection_name}'",
         ) as pbar:
             for doc in doc_iter:
                 batch.append(doc)
@@ -156,29 +159,27 @@ class MongoDBManager:
                 pbar.update(len(batch))
 
         logger.info(
-            f"Indexing complete. {indexed} documents processed into '{output_collection}'."
+            f"Indexing complete. {indexed} documents from '{collection}' processed into '{self.index_collection_name}'."
         )
         return VectorStoreIndex.from_vector_store(vector_store)
 
-    def load_vector_index(self, collection_name: str) -> VectorStoreIndex:
+    def load_vector_index(self) -> VectorStoreIndex:
         """Load a pre-existing vector index from MongoDB. No document embedding."""
-        db = self.client.get_database()
         vector_store = MongoDBAtlasVectorSearch(
             mongodb_client=self.client,
-            db_name=db.name,
-            collection_name=collection_name,
+            collection_name=self.index_collection_name,
             vector_index_name="vector_index",
         )
         return VectorStoreIndex.from_vector_store(vector_store)
 
-    def get_journal_ids(self, collection_name: str) -> List[str]:
+    def get_journal_ids(self) -> List[str]:
         """Get distinct journal IDs from the indexed collection via MongoDB query.
         Queries metadata.journal_id from the vector store nodes."""
-        collection = self.get_collection(collection_name)
+        collection = self.get_collection(self.index_collection_name)
         ids = collection.distinct("metadata.journal_id")
         ids = [jid for jid in ids if jid and jid != "unknown"]
         logger.info(
-            f"Found {len(ids)} journal IDs in collection '{collection_name}': {ids}"
+            f"Found {len(ids)} journal IDs in collection '{self.index_collection_name}': {ids}"
         )
         return ids
 
