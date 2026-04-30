@@ -49,18 +49,17 @@ def _serialize_excel_doc(db_doc: dict, collection_name: str) -> Document:
     )
 
 
-def _make_ingestion_pipeline(
-    vector_store: MongoDBAtlasVectorSearch, embed_model_name: str
-):
+def _make_ingestion_pipeline(vector_store: MongoDBAtlasVectorSearch):
     """Create an IngestionPipeline with chunking and embedding transformations."""
     from llama_index.core.ingestion import IngestionPipeline
     from llama_index.core.node_parser import SentenceSplitter
-    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
+    from embed import get_embed_model
 
     return IngestionPipeline(
         transformations=[
             SentenceSplitter(chunk_size=512, chunk_overlap=50),
-            HuggingFaceEmbedding(model_name=embed_model_name),
+            get_embed_model(),
         ],
         vector_store=vector_store,
     )
@@ -181,7 +180,7 @@ class MongoDBManager:
             path="embedding",
             similarity="cosine",
         )
-        ingestion = _make_ingestion_pipeline(vector_store, embed_model_name)
+        ingestion = _make_ingestion_pipeline(vector_store)
 
         src_coll = self.get_collection(collection)
         total_docs = src_coll.count_documents(

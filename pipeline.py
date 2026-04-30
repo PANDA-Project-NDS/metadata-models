@@ -5,7 +5,6 @@ from typing import List
 
 from llama_index.core import Settings
 from llama_index.core import VectorStoreIndex
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from pydantic import ValidationError, BaseModel
 from pydantic_ai import ModelSettings
 from pydantic_ai.exceptions import UnexpectedModelBehavior
@@ -21,6 +20,9 @@ from models.journal import JournalMetadata
 from search import assemble_context, retrieve_for_pass, JournalSearchDeps
 
 from dotenv import load_dotenv
+
+from embed import get_embed_model
+
 load_dotenv()
 
 # Configure logging
@@ -29,9 +31,7 @@ logger = logging.getLogger(__name__)
 
 # --- LlamaIndex Configuration ---
 # Query-time embedding model (required for retrieval)
-Settings.embed_model = HuggingFaceEmbedding(
-    model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-)
+Settings.embed_model = get_embed_model()
 Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
