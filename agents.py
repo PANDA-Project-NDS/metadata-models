@@ -14,6 +14,9 @@ from models.journal import (
 )
 from search import JournalSearchDeps, journal_search
 
+from dotenv import load_dotenv
+load_dotenv()
+
 logfire.configure(send_to_logfire='if-token-present')
 logfire.instrument_pydantic_ai()
 
