@@ -5,8 +5,8 @@ import os
 from typing import Iterator
 from typing import List
 
-import trafilatura
 import tqdm
+import trafilatura
 from llama_index.core import Document
 from llama_index.core import VectorStoreIndex
 from llama_index.vector_stores.mongodb import MongoDBAtlasVectorSearch
@@ -46,6 +46,37 @@ def _serialize_excel_doc(db_doc: dict, collection_name: str) -> Document:
             "scope": "excel",
         },
         excluded_embed_metadata_keys=["source_uri", "journal_id", "publisher", "scope"],
+    )
+
+
+def _serialize_html_doc(db_doc: dict, collection_name: str) -> Document | None:
+    """Extract HTML content and serialize into a Document for embedding."""
+    metadata = db_doc.get("metadata", {})
+    html_content = metadata.get("html", "")
+    if not html_content:
+        return None
+
+    extracted_text = trafilatura.extract(html_content)
+    if not extracted_text:
+        extracted_text = html_content
+
+    source_url = metadata.get("url", "unknown")
+    journal_id = metadata.get("title", "unknown")
+
+    return Document(
+        text=extracted_text,
+        metadata={
+            "source_uri": source_url,
+            "journal_id": journal_id,
+            "publisher": collection_name,
+            "scope": "html",
+        },
+        excluded_embed_metadata_keys=[
+            "source_uri",
+            "journal_id",
+            "publisher",
+            "scope",
+        ],
     )
 
 
@@ -97,38 +128,8 @@ class MongoDBManager:
     def db_name(self) -> str:
         return os.getenv("MONGO_DB", "retrieve")
 
-    def load_source_documents(
-        self, collection_name: str, limit: int = 0
-    ) -> List[Document]:
-        """Load source HTML documents from a MongoDB collection."""
-        collection = self.get_collection(collection_name)
-        query = {"metadata.html": {"$exists": True, "$ne": None}}
-        documents = []
-        for db_doc in collection.find(query).limit(limit):
-            html_content = db_doc.get("metadata", {}).get("html", "")
-            if not html_content:
-                continue
-            extracted_text = trafilatura.extract(html_content)
-            if not extracted_text:
-                extracted_text = html_content
-            metadata = db_doc.get("metadata", {})
-            source_url = metadata.get("url", "unknown")
-            journal_id = metadata.get("title", "unknown")
-            doc = Document(
-                text=extracted_text,
-                metadata={
-                    "source_uri": source_url,
-                    "journal_id": journal_id,
-                },
-            )
-            documents.append(doc)
-        logger.info(
-            f"Loaded {len(documents)} documents from MongoDB collection '{collection_name}'"
-        )
-        return documents
-
     def stream_source_documents(
-        self, collection_name: str, limit: int = 0
+            self, collection_name: str, limit: int = 0
     ) -> Iterator[Document]:
         """Yield Document objects from MongoDB without holding them all in memory.
         Only yields documents that have metadata.html."""
@@ -137,33 +138,12 @@ class MongoDBManager:
             {"metadata.html": {"$exists": True, "$ne": None}}
         ).limit(limit)
         for db_doc in cursor:
-            html_content = db_doc.get("metadata", {}).get("html", "")
-            if not html_content:
-                continue
-            extracted_text = trafilatura.extract(html_content)
-            if not extracted_text:
-                extracted_text = html_content
-            metadata = db_doc.get("metadata", {})
-            source_url = metadata.get("url", "unknown")
-            journal_id = metadata.get("title", "unknown")
-            yield Document(
-                text=extracted_text,
-                metadata={
-                    "source_uri": source_url,
-                    "journal_id": journal_id,
-                    "publisher": collection_name,
-                    "scope": "html",
-                },
-                excluded_embed_metadata_keys=[
-                    "source_uri",
-                    "journal_id",
-                    "publisher",
-                    "scope",
-                ],
-            )
+            doc = _serialize_html_doc(db_doc, collection_name)
+            if doc:
+                yield doc
 
     def stream_excel_documents(
-        self, collection_name: str, limit: int = 0
+            self, collection_name: str, limit: int = 0
     ) -> Iterator[Document]:
         """Yield Document objects from non-HTML (Excel/APC) documents in MongoDB."""
         collection = self.get_collection(collection_name)
@@ -172,10 +152,10 @@ class MongoDBManager:
             yield _serialize_excel_doc(db_doc, collection_name)
 
     def index_documents(
-        self,
-        collection: str,
-        limit: int = 0,
-        batch_size: int = 10,
+            self,
+            collection: str,
+            limit: int = 0,
+            batch_size: int = 10,
     ) -> VectorStoreIndex:
         """Stream raw documents, chunk, embed, and persist into the search_index collection.
         Processes in batches via IngestionPipeline."""
@@ -204,27 +184,17 @@ class MongoDBManager:
             self.stream_source_documents(collection, limit),
             self.stream_excel_documents(collection, limit),
         )
-        batch: List[Document] = []
-        indexed = 0
-        with tqdm.tqdm(
-            total=total_docs,
-            desc=f"Indexing to '{self.index_collection_name}'",
-        ) as pbar:
-            for doc in doc_iter:
-                batch.append(doc)
-                if len(batch) >= batch_size:
-                    ingestion.run(documents=batch)
-                    indexed += len(batch)
-                    pbar.update(len(batch))
-                    batch = []
-            if batch:
-                ingestion.run(documents=batch)
-                indexed += len(batch)
-                pbar.update(len(batch))
 
-        logger.info(
-            f"Indexing complete. {indexed} documents from '{collection}' processed into '{self.index_collection_name}'."
-        )
+        with tqdm.tqdm(
+                total=total_docs,
+                desc=f"Indexing to '{self.index_collection_name}'",
+        ) as pbar:
+            for batch in itertools.batched(doc_iter, batch_size):
+                ingestion.run(documents=list(batch))
+                pbar.update(len(batch))
+            logger.info(
+                f"Indexing complete. {pbar.n} documents from '{collection}' processed into '{self.index_collection_name}'."
+            )
         return VectorStoreIndex.from_vector_store(vector_store)
 
     def load_vector_index(self) -> VectorStoreIndex:
@@ -265,10 +235,17 @@ class MongoDBManager:
         )
         return saved
 
+    def init_metadata_index(self, collection_name: str) -> None:
+        """Initialize the metadata collection has the necessary indexes."""
+        collection = self.get_collection(collection_name)
+        collection.create_index("journal_id", unique=True)
+        logger.info(
+            f"Initialized MongoDB collection '{collection_name}' with unique index on 'journal_id'"
+        )
+
     def save_metadata_one(self, collection_name: str, journal_id: str, metadata: dict):
         """Save a single journal's metadata for streaming pipeline output."""
         collection = self.get_collection(collection_name)
-        collection.create_index("journal_id", unique=True)
         collection.replace_one(
             {"journal_id": journal_id},
             {**metadata, "journal_id": journal_id},

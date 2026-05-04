@@ -3,6 +3,7 @@ import logging
 import os
 from typing import List
 
+from dotenv import load_dotenv
 from llama_index.core import Settings
 from llama_index.core import VectorStoreIndex
 from pydantic import ValidationError, BaseModel
@@ -16,12 +17,9 @@ from agents import (
     editors_agent,
     EXTRACTION_QUERIES,
 )
+from embed import get_embed_model
 from models.journal import JournalMetadata
 from search import assemble_context, retrieve_for_pass, JournalSearchDeps
-
-from dotenv import load_dotenv
-
-from embed import get_embed_model
 
 load_dotenv()
 
@@ -36,7 +34,7 @@ Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
 async def run_extraction_pass(
-    index: VectorStoreIndex, agent, queries: List[str], journal_id: str
+        index: VectorStoreIndex, agent, queries: List[str], journal_id: str
 ) -> BaseModel:
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
@@ -124,6 +122,7 @@ if __name__ == "__main__":
 
     from db import MongoDBManager
 
+
     async def main():
         try:
             client = MongoDBManager(os.environ["MONGODB_URI"])
@@ -139,6 +138,7 @@ if __name__ == "__main__":
                 metadata_collection = os.environ.get(
                     "MONGO_METADATA_COLLECTION", "journal_metadata"
                 )
+                client.init_metadata_index(metadata_collection)
                 for j_id in tqdm(all_journal_ids, desc="Processing journals"):
                     metadata = await process_journal(global_index, j_id)
                     client.save_metadata_one(
@@ -153,5 +153,6 @@ if __name__ == "__main__":
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
+
 
     asyncio.run(main())
