@@ -1,10 +1,11 @@
 import os
 
 import logfire
-from pydantic_ai import Agent, InlineDefsJsonSchemaTransformer, Tool
+from dotenv import load_dotenv
+from pydantic_ai import Agent, Tool
+from pydantic_ai.models import create_async_http_client
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.profiles.openai import OpenAIModelProfile
 
 from models.journal import (
     BasicInfoExtraction,
@@ -14,12 +15,10 @@ from models.journal import (
 )
 from search import JournalSearchDeps, journal_search
 
-from dotenv import load_dotenv
 load_dotenv()
 
 logfire.configure(send_to_logfire='if-token-present')
 logfire.instrument_pydantic_ai()
-
 
 # --- Extraction Queries ---
 
@@ -72,8 +71,9 @@ Read the context carefully and extract the data into the requested JSON schema. 
 
 llm_model = OpenAIChatModel(
     os.getenv("OPENAI_MODEL", ""),
-    provider=OpenAIProvider(os.getenv("OPENAI_API_URL")),
-    #profile=OpenAIModelProfile(json_schema_transformer=InlineDefsJsonSchemaTransformer)
+    provider=OpenAIProvider(os.getenv("OPENAI_API_URL"),
+                            http_client=create_async_http_client(timeout=int(os.getenv("OPENAI_HTTP_TIMEOUT", "60")))),
+    # profile=OpenAIModelProfile(json_schema_transformer=InlineDefsJsonSchemaTransformer)
 )
 
 journal_search_tool = Tool(

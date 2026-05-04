@@ -93,6 +93,7 @@ async def journal_search(ctx: RunContext[JournalSearchDeps], query: str) -> str:
     Ignores results that were already in context.
 
     Args:
+        ctx: tool context
         query: The search query.
     """
     index = ctx.deps.index

@@ -40,12 +40,12 @@ def _serialize_excel_doc(db_doc: dict, collection_name: str) -> Document:
     return Document(
         text="\n".join(parts),
         metadata={
-            "file_path": m.get("url", "unknown"),
             "source_uri": m.get("url", "unknown"),
             "journal_id": m.get("title", "unknown"),
             "publisher": collection_name,
             "scope": "excel",
         },
+        excluded_embed_metadata_keys=["source_uri", "journal_id", "publisher", "scope"],
     )
 
 
@@ -53,12 +53,20 @@ def _make_ingestion_pipeline(vector_store: MongoDBAtlasVectorSearch):
     """Create an IngestionPipeline with chunking and embedding transformations."""
     from llama_index.core.ingestion import IngestionPipeline
     from llama_index.core.node_parser import SentenceSplitter
+    from transformers import AutoTokenizer
 
     from embed import get_embed_model
 
+    # set tokenizer to get better approximation of token counts for chunking, based on the embedding model
+    embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+    tokenizer = AutoTokenizer.from_pretrained(embed_model_name)
+
     return IngestionPipeline(
         transformations=[
-            SentenceSplitter(chunk_size=512, chunk_overlap=50),
+            SentenceSplitter(
+                # lower chunk_size to account for metadata
+                chunk_size=450, chunk_overlap=50, tokenizer=tokenizer.encode
+            ),
             get_embed_model(),
         ],
         vector_store=vector_store,
@@ -109,7 +117,6 @@ class MongoDBManager:
             doc = Document(
                 text=extracted_text,
                 metadata={
-                    "file_path": source_url,
                     "source_uri": source_url,
                     "journal_id": journal_id,
                 },
@@ -142,12 +149,17 @@ class MongoDBManager:
             yield Document(
                 text=extracted_text,
                 metadata={
-                    "file_path": source_url,
                     "source_uri": source_url,
                     "journal_id": journal_id,
                     "publisher": collection_name,
                     "scope": "html",
                 },
+                excluded_embed_metadata_keys=[
+                    "source_uri",
+                    "journal_id",
+                    "publisher",
+                    "scope",
+                ],
             )
 
     def stream_excel_documents(
@@ -167,8 +179,6 @@ class MongoDBManager:
     ) -> VectorStoreIndex:
         """Stream raw documents, chunk, embed, and persist into the search_index collection.
         Processes in batches via IngestionPipeline."""
-        embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-
         vector_store = MongoDBAtlasVectorSearch(
             mongodb_client=self.client,
             db_name=self.db_name,
@@ -179,6 +189,7 @@ class MongoDBManager:
             dimensions=int(os.getenv("EMBEDDING_DIM", "384")),
             path="embedding",
             similarity="cosine",
+            filters=["metadata.journal_id", "metadata.publisher", "metadata.scope"],
         )
         ingestion = _make_ingestion_pipeline(vector_store)
 

@@ -38,7 +38,7 @@ def get_embed_model():
     """Return an embedding model — OpenAI API if OPENAI_EMBED_MODEL is set, else local HuggingFace."""
     if os.getenv("OPENAI_EMBED_MODEL"):
         return OpenAIEmbeddingQueryPrefix(
-            api_key=os.getenv("OPENAI_API_KEY", "not-needed"),
+            api_key=os.getenv("OPENAI_API_KEY"),
             api_base=os.getenv("OPENAI_API_URL"),
             model_name=os.getenv("OPENAI_EMBED_MODEL"),
         )

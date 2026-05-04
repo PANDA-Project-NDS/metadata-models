@@ -6,8 +6,8 @@ from typing import List
 from llama_index.core import Settings
 from llama_index.core import VectorStoreIndex
 from pydantic import ValidationError, BaseModel
-from pydantic_ai import ModelSettings
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+from tqdm import tqdm
 
 from agents import (
     basic_info_agent,
@@ -68,7 +68,7 @@ async def run_extraction_pass(
             index=index, journal_id=journal_id, existing_node_ids=existing_ids
         )
         result = await agent.run(
-            prompt, deps=deps, model_settings=ModelSettings(timeout=300)
+            prompt, deps=deps
         )
         return result.output
     except ValidationError as e:
@@ -139,7 +139,7 @@ if __name__ == "__main__":
                 metadata_collection = os.environ.get(
                     "MONGO_METADATA_COLLECTION", "journal_metadata"
                 )
-                for j_id in all_journal_ids:
+                for j_id in tqdm(all_journal_ids, desc="Processing journals"):
                     metadata = await process_journal(global_index, j_id)
                     client.save_metadata_one(
                         metadata_collection,
