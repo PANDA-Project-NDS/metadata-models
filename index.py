@@ -5,6 +5,7 @@ import argparse
 import logging
 import os
 
+from db import Indexer
 from db import MongoDBManager
 
 from dotenv import load_dotenv
@@ -39,10 +40,10 @@ def main():
 
     collection_name = os.environ.get("MONGO_COLLECTION", "wiley_full")
 
-    client = MongoDBManager(os.environ["MONGODB_URI"])
+    db = MongoDBManager(os.environ["MONGODB_URI"])
     try:
         if args.clear_embeddings:
-            result = client.get_collection(collection_name).update_many(
+            result = db.get_collection(collection_name).update_many(
                 {}, {"$unset": {"embedding": ""}}
             )
             logger.info(
@@ -50,21 +51,22 @@ def main():
             )
         else:
             if args.force_rebuild:
-                client.get_collection(client.index_collection_name).drop()
+                db.get_collection(db.index_collection_name).drop()
                 logger.info(
-                    f"Dropped existing collection '{client.index_collection_name}'"
+                    f"Dropped existing collection '{db.index_collection_name}'"
                 )
 
-            client.index_documents(
+            indexer = Indexer(db)
+            indexer.index_documents(
                 collection_name,
                 limit=args.limit,
                 batch_size=args.batch_size,
             )
 
-            journal_ids = client.get_journal_ids()
+            journal_ids = db.get_journal_ids()
             logger.info(f"Indexed {len(journal_ids)} journals: {journal_ids}")
     finally:
-        client.close()
+        db.close()
 
 
 if __name__ == "__main__":

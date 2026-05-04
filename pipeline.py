@@ -17,7 +17,7 @@ from agents import (
     editors_agent,
     EXTRACTION_QUERIES,
 )
-from embed import get_embed_model
+from db import get_embed_model
 from models.journal import JournalMetadata
 from search import assemble_context, retrieve_for_pass, JournalSearchDeps
 
@@ -34,7 +34,7 @@ Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
 async def run_extraction_pass(
-        index: VectorStoreIndex, agent, queries: List[str], journal_id: str
+    index: VectorStoreIndex, agent, queries: List[str], journal_id: str
 ) -> BaseModel:
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
@@ -65,9 +65,7 @@ async def run_extraction_pass(
         deps = JournalSearchDeps(
             index=index, journal_id=journal_id, existing_node_ids=existing_ids
         )
-        result = await agent.run(
-            prompt, deps=deps
-        )
+        result = await agent.run(prompt, deps=deps)
         return result.output
     except ValidationError as e:
         logger.error(f"[{journal_id}] Validation error during extraction: {e}")
@@ -120,28 +118,29 @@ if __name__ == "__main__":
     import asyncio
     import json
 
+    from db import Indexer
     from db import MongoDBManager
-
 
     async def main():
         try:
-            client = MongoDBManager(os.environ["MONGODB_URI"])
+            db = MongoDBManager(os.environ["MONGODB_URI"])
             try:
                 # Load pre-indexed vector store (no document embedding)
-                global_index = client.load_vector_index()
+                indexer = Indexer(db)
+                global_index = indexer.load_vector_index()
 
                 # Query journal IDs from indexed collection
-                all_journal_ids = client.get_journal_ids()
+                all_journal_ids = db.get_journal_ids()
                 logger.info(f"Processing {len(all_journal_ids)} journals")
 
                 # Stream: process and save each journal immediately
                 metadata_collection = os.environ.get(
                     "MONGO_METADATA_COLLECTION", "journal_metadata"
                 )
-                client.init_metadata_index(metadata_collection)
+                db.init_metadata_index(metadata_collection)
                 for j_id in tqdm(all_journal_ids, desc="Processing journals"):
                     metadata = await process_journal(global_index, j_id)
-                    client.save_metadata_one(
+                    db.save_metadata_one(
                         metadata_collection,
                         j_id,
                         json.loads(metadata.model_dump_json()),
@@ -149,10 +148,9 @@ if __name__ == "__main__":
                     logger.info(f"Saved metadata for {j_id}")
 
             finally:
-                client.close()
+                db.close()
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
-
 
     asyncio.run(main())
