@@ -60,11 +60,12 @@ class MongoDBManager:
         for db_doc in cursor:
             yield _serialize_excel_doc(db_doc, collection_name)
 
-    def get_journal_ids(self) -> List[str]:
+    def get_journal_ids(self, publisher: str | None = None) -> List[str]:
         """Get distinct journal IDs from the indexed collection via MongoDB query.
-        Queries metadata.journal_id from the vector store nodes."""
+        Queries metadata.journal_id from the vector store nodes. Optionally filters by publisher."""
         collection = self.get_collection(self.index_collection_name)
-        ids = collection.distinct("metadata.journal_id")
+        filter_query = {"metadata.publisher": publisher} if publisher else {}
+        ids = collection.distinct("metadata.journal_id", filter_query)
         ids = [jid for jid in ids if jid and jid != "unknown"]
         logger.info(
             f"Found {len(ids)} journal IDs in collection '{self.index_collection_name}': {ids}"
@@ -79,12 +80,14 @@ class MongoDBManager:
             f"Initialized MongoDB collection '{collection_name}' with unique index on 'journal_id'"
         )
 
-    def save_metadata_one(self, collection_name: str, journal_id: str, metadata: dict):
+    def save_metadata_one(
+        self, collection_name: str, publisher_id: str, journal_id: str, metadata: dict
+    ):
         """Save a single journal's metadata for streaming pipeline output."""
         collection = self.get_collection(collection_name)
         collection.replace_one(
             {"journal_id": journal_id},
-            {**metadata, "journal_id": journal_id},
+            {**metadata, "publisher_id": publisher_id, "journal_id": journal_id},
             upsert=True,
         )
 

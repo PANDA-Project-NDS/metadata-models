@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import logging
 import os
 from typing import List
@@ -122,6 +123,12 @@ if __name__ == "__main__":
     from db import MongoDBManager
 
     async def main():
+        parser = argparse.ArgumentParser(
+            description="Run extraction pipeline for a publisher"
+        )
+        parser.add_argument("--publisher", required=True, help="Publisher to process")
+        args = parser.parse_args()
+
         try:
             db = MongoDBManager(os.environ["MONGODB_URI"])
             try:
@@ -129,8 +136,8 @@ if __name__ == "__main__":
                 indexer = Indexer(db)
                 global_index = indexer.load_vector_index()
 
-                # Query journal IDs from indexed collection
-                all_journal_ids = db.get_journal_ids()
+                # Query journal IDs from indexed collection, filtered by publisher
+                all_journal_ids = db.get_journal_ids(publisher=args.publisher)
                 logger.info(f"Processing {len(all_journal_ids)} journals")
 
                 # Stream: process and save each journal immediately
@@ -141,9 +148,10 @@ if __name__ == "__main__":
                 for j_id in tqdm(all_journal_ids, desc="Processing journals"):
                     metadata = await process_journal(global_index, j_id)
                     db.save_metadata_one(
-                        metadata_collection,
-                        j_id,
-                        json.loads(metadata.model_dump_json()),
+                        collection_name=metadata_collection,
+                        journal_id=j_id,
+                        publisher_id=args.publisher,
+                        metadata=json.loads(metadata.model_dump_json()),
                     )
                     logger.info(f"Saved metadata for {j_id}")
 
