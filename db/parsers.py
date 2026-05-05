@@ -41,7 +41,7 @@ def _serialize_html_doc(db_doc: dict, collection_name: str) -> Document | None:
     """Extract HTML content and serialize into a Document for embedding."""
     metadata = db_doc.get("metadata", {})
     html_content = metadata.get("html", "")
-    if not html_content:
+    if not html_content or type(html_content) != str:
         return None
 
     extracted_text = trafilatura.extract(html_content)
