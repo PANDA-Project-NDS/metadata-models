@@ -36,9 +36,14 @@ def main():
         action="store_true",
         help="Remove embedding field from source collection after indexing",
     )
+    parser.add_argument(
+        "--collection",
+        required=True,
+        help="Source collection name",
+    )
     args = parser.parse_args()
 
-    collection_name = os.environ.get("MONGO_COLLECTION", "wiley_full")
+    collection_name = args.collection
 
     db = MongoDBManager(os.environ["MONGODB_URI"])
     try:
