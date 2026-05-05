@@ -27,9 +27,9 @@ def main():
         "--batch-size", type=int, default=10, help="Batch size for ingestion pipeline"
     )
     parser.add_argument(
-        "--force-rebuild",
+        "--clear",
         action="store_true",
-        help="Drop existing index collection before re-indexing",
+        help="Remove existing documents for this publisher from the index before re-indexing",
     )
     parser.add_argument(
         "--clear-embeddings",
@@ -50,10 +50,12 @@ def main():
                 f"Cleared embeddings from {result.modified_count} documents in '{collection_name}'"
             )
         else:
-            if args.force_rebuild:
-                db.get_collection(db.index_collection_name).drop()
+            if args.clear:
+                result = db.get_collection(db.index_collection_name).delete_many(
+                    {"metadata.publisher": collection_name}
+                )
                 logger.info(
-                    f"Dropped existing collection '{db.index_collection_name}'"
+                    f"Removed {result.deleted_count} existing documents for publisher '{collection_name}' from '{db.index_collection_name}'"
                 )
 
             indexer = Indexer(db)
@@ -62,9 +64,6 @@ def main():
                 limit=args.limit,
                 batch_size=args.batch_size,
             )
-
-            journal_ids = db.get_journal_ids()
-            logger.info(f"Indexed {len(journal_ids)} journals: {journal_ids}")
     finally:
         db.close()
 
