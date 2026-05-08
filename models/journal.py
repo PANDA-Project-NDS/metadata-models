@@ -81,25 +81,57 @@ class Membership(BaseModel):
 
 
 class DiamondOpenAccess(SourcedModel):
-    """Criteria for diamond/platinum open access classification."""
+    """Journal diamond open access classification as defined within the DIAMAS and CRAFT‑OA projects."""
 
     model_config = ConfigDict(extra="forbid")
 
     scholarly_journal: Optional[bool] = Field(
-        default=None, description="Meets scholarly journal standards."
+        default=None,
+        description=(
+            "Meets scholarly journal standards. "
+            "The journal should be a scholarly journal that selects papers via an explicitly "
+            "described evaluation process before and/or after publication, "
+            "in line with accepted practices in the relevant discipline."
+        ),
     )
     community_owned: Optional[bool] = Field(
-        default=None, description="Owned and governed by academic community."
+        default=None,
+        description=(
+            "Owned and governed by academic community. "
+            "The journal title must be owned by public or not-for-profit organisations "
+            "(or parts thereof) whose mission includes performing or promoting research and scholarship. "
+            "These include but are not limited to research performing organisations (RPOs), "
+            "research funding organisations (RFOs), organisations connected to RPOs "
+            "(university libraries, university presses, faculties, and departments), "
+            "research institutes, and scholarly societies. "
+            "The journal should explain its ownership status on its webpage."
+        ),
     )
     open_access_with_open_licenses: Optional[bool] = Field(
-        default=None, description="Content is openly accessible under open licenses."
+        default=None,
+        description=(
+            "Content is openly accessible under open licenses. "
+            "All outputs of the journal should be Open Access and carry an open license "
+            "that is included in the article-level metadata."
+        ),
     )
     no_fees: Optional[bool] = Field(
-        default=None, description="No fees for authors or readers."
+        default=None,
+        description=(
+            "No fees for authors or readers. "
+            "Publication in the journal is not contingent on the payment of fees of any kind "
+            "(e.g. article processing charges or membership dues). "
+            "The journal should state this as such on its webpage. "
+            "Voluntary author contributions and donations are allowed, if this is not a condition for publication."
+        ),
     )
     open_to_all_authors: Optional[bool] = Field(
         default=None,
-        description="Accepts submissions from all eligible authors without restriction.",
+        description=(
+            "Accepts submissions from all eligible authors without restriction. "
+            "Authorship in the journal should not be limited to any type of affiliation. "
+            "Any author can submit an article that is in line with the aims and scope of the journal."
+        ),
     )
 
 
@@ -112,6 +144,9 @@ class ISSN(BaseModel):
     )
     online: Optional[SourcedValue[str]] = Field(
         default=None, description="Online ISSN in NNNN-NNNN form."
+    )
+    linking: Optional[str] = Field(
+        default=None, description="Linking ISSN (ISSN-L) in NNNN-NNNN form."
     )
 
     @field_validator("print", "online")
@@ -277,6 +312,7 @@ class Pricing(BaseModel):
     discounts: List[Discount] = Field(
         default_factory=list, description="Waivers and discounts."
     )
+
 
 # --- Agent Extraction Targets ---
 
