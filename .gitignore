@@ -1,8 +1,10 @@
 .idea/
 __pycache__/
+.logfire/
+.opencode/
+.venv/
 *.pyc
 .env
 .python-version
 uv.lock
-.venv/
 prompt.md

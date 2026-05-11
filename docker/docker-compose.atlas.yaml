@@ -7,3 +7,7 @@ services:
     ports:
       - 27017:27017
     hostname: mongodb
+    deploy:
+      resources:
+        limits:
+          memory: 8G
