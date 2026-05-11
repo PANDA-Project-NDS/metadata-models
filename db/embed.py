@@ -10,7 +10,7 @@ load_dotenv()
 class OpenAIEmbeddingQueryPrefix(OpenAIEmbedding):
     """OpenAIEmbedding that prefixes queries with query instructions.
 
-    BGE Models need the following prefix for example:
+    BGE / Snowflake Models need the following prefix for example:
     "Represent this sentence for searching relevant passages: "
     """
 
@@ -20,17 +20,18 @@ class OpenAIEmbeddingQueryPrefix(OpenAIEmbedding):
 
     def _resolve_instruction(self) -> str:
         from llama_index.embeddings.huggingface.utils import (
-            get_query_instruct_for_model_name,
+            DEFAULT_QUERY_BGE_INSTRUCTION_EN, get_query_instruct_for_model_name
         )
-
-        for name in (self.model_name, f"BAAI/{self.model_name}"):
-            inst = get_query_instruct_for_model_name(name)
-            if inst:
-                return inst
+        # try library defaults
+        if inst := get_query_instruct_for_model_name(self.model_name):
+            return inst
+        # bge, snowflake
+        if any(x in self.model_name for x in ["bge", "snowflake"]):
+            return DEFAULT_QUERY_BGE_INSTRUCTION_EN
         return ""
 
     def _get_query_embedding(self, query: str) -> list[float]:
-        prefixed = f"{self._query_instruction} {query}".strip()
+        prefixed = f"{self._query_instruction}{query}".strip()
         return super()._get_query_embedding(prefixed)
 
 
