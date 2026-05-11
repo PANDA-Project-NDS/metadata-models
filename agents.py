@@ -2,7 +2,7 @@ import os
 
 import logfire
 from dotenv import load_dotenv
-from pydantic_ai import Agent, Tool
+from pydantic_ai import Agent, Tool, RunContext
 from pydantic_ai.models import create_async_http_client
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -13,7 +13,7 @@ from models.journal import (
     FeesExtraction,
     EditorialExtraction,
 )
-from search import JournalSearchDeps, journal_search
+from search import JournalSourcesDeps, journal_search
 
 load_dotenv()
 
@@ -69,6 +69,11 @@ CRITICAL RULES:
 Read the context carefully and extract the data into the requested JSON schema. Focus only on the fields present in the output schema.
 """
 
+
+def context_instructions(ctx: RunContext[JournalSourcesDeps]) -> str:
+    return ctx.deps.context_instructions()
+
+
 llm_model = OpenAIChatModel(
     os.getenv("OPENAI_MODEL", ""),
     provider=OpenAIProvider(os.getenv("OPENAI_API_URL"),
@@ -86,9 +91,10 @@ basic_info_agent = Agent(
     name="Info Agent",
     model=llm_model,
     output_type=BasicInfoExtraction,
-    instructions=SYSTEM_PROMPT,
+    system_prompt=SYSTEM_PROMPT,
+    instructions=context_instructions,
     output_retries=3,
-    deps_type=JournalSearchDeps,
+    deps_type=JournalSourcesDeps,
     tools=[journal_search_tool],
 )
 
@@ -96,9 +102,10 @@ policies_agent = Agent(
     name="Policies Agent",
     model=llm_model,
     output_type=PoliciesExtraction,
-    instructions=SYSTEM_PROMPT,
+    system_prompt=SYSTEM_PROMPT,
+    instructions=context_instructions,
     output_retries=3,
-    deps_type=JournalSearchDeps,
+    deps_type=JournalSourcesDeps,
     tools=[journal_search_tool],
 )
 
@@ -106,9 +113,10 @@ fees_agent = Agent(
     name="Fees Agent",
     model=llm_model,
     output_type=FeesExtraction,
-    instructions=SYSTEM_PROMPT,
+    system_prompt=SYSTEM_PROMPT,
+    instructions=context_instructions,
     output_retries=3,
-    deps_type=JournalSearchDeps,
+    deps_type=JournalSourcesDeps,
     tools=[journal_search_tool],
 )
 
@@ -116,8 +124,9 @@ editors_agent = Agent(
     name="Editors Agent",
     model=llm_model,
     output_type=EditorialExtraction,
-    instructions=SYSTEM_PROMPT,
+    system_prompt=SYSTEM_PROMPT,
+    instructions=context_instructions,
     output_retries=3,
-    deps_type=JournalSearchDeps,
+    deps_type=JournalSourcesDeps,
     tools=[journal_search_tool],
 )

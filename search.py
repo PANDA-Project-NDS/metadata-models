@@ -12,12 +12,44 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class JournalSearchDeps:
-    """Runtime dependencies for the journal search tool."""
+class JournalSourcesDeps:
+    """Agent runtime dependencies for the journal context"""
 
     index: BaseIndex
     journal_id: str
-    existing_node_ids: set[str] = field(default_factory=set)
+    context_nodes: list[NodeWithScore] = field(default_factory=list)
+
+    def context_instructions(self) -> str:
+        return f"Extract metadata from Journal '{self.journal_id}' using the following retrieved context:\n\n{self.format_nodes()}"
+
+    def format_nodes(self, nodes: list[NodeWithScore] | None = None) -> str:
+        """Formats the retrieved nodes into a single context string with source citations.
+
+        Args:
+            nodes: Nodes to format. Formats all nodes present in `context_nodes` by default.
+        """
+        context_parts = []
+
+        if nodes is None:
+            # nodes not passed, fallback to all
+            nodes = self.context_nodes
+
+        for node in nodes:
+            source = node.node.metadata.get("source_uri", "Unknown Source")
+            formatted_chunk = f"--- [Source: {source}] ---\n{node.node.text}\n"
+            context_parts.append(formatted_chunk)
+
+        return "\n".join(context_parts)
+
+    def node_ids(self) -> set[str]:
+        """Returns the set of node IDs currently in context."""
+        return set(n.node.node_id for n in self.context_nodes)
+
+    def extend_nodes(self, nodes: list[NodeWithScore]) -> list[NodeWithScore]:
+        """Extends the provided nodes to the context, ignoring any that are already present. Returns the list of new nodes added."""
+        new_nodes = list(filter(lambda n: n.node.node_id not in self.node_ids(), nodes))
+        self.context_nodes.extend(new_nodes)
+        return new_nodes
 
 
 @dataclass
@@ -68,18 +100,6 @@ def retrieve_for_pass(
     )
 
 
-def assemble_context(nodes: list[NodeWithScore]) -> str:
-    """Formats the retrieved nodes into a single context string with source citations."""
-    context_parts = []
-
-    for node in nodes:
-        source = node.node.metadata.get("source_uri", "Unknown Source")
-        formatted_chunk = f"--- [Source: {source}] ---\n{node.node.text}\n"
-        context_parts.append(formatted_chunk)
-
-    return "\n".join(context_parts)
-
-
 def build_retriever(index: BaseIndex, journal_id: str, top_k: int = 2) -> BaseRetriever:
     """Build a LlamaIndex retriever scoped to journal_id using MetadataFilters."""
     filters = MetadataFilters(
@@ -88,7 +108,7 @@ def build_retriever(index: BaseIndex, journal_id: str, top_k: int = 2) -> BaseRe
     return index.as_retriever(similarity_top_k=top_k, filters=filters)
 
 
-async def journal_search(ctx: RunContext[JournalSearchDeps], query: str) -> str:
+async def journal_search(ctx: RunContext[JournalSourcesDeps], query: str) -> str:
     """Search index for additional context scoped to the current journal.
     Ignores results that were already in context.
 
@@ -108,12 +128,10 @@ async def journal_search(ctx: RunContext[JournalSearchDeps], query: str) -> str:
         results = build_retriever(index, journal_id).retrieve(query)
         if not results:
             return "No results found for this query."
-        filtered_nodes = list(filter(lambda n: n.node.node_id not in ctx.deps.existing_node_ids, results))
-        if not filtered_nodes:
+        new_nodes = ctx.deps.extend_nodes(results)
+        if not new_nodes:
             return "Query gave no new results."
-        # ignore current results on further searches
-        ctx.deps.existing_node_ids |= set([n.node.node_id for n in filtered_nodes])
-        return assemble_context(filtered_nodes)
+        return ctx.deps.format_nodes(new_nodes)
     except Exception:
         logger.exception("retrieval tool failed for query: %s", query)
         return "Search failed internally due to an error."

@@ -20,7 +20,7 @@ from agents import (
 )
 from db import get_embed_model
 from models.journal import JournalMetadata
-from search import assemble_context, retrieve_for_pass, JournalSearchDeps
+from search import retrieve_for_pass, JournalSourcesDeps
 
 load_dotenv()
 
@@ -35,7 +35,7 @@ Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
 async def run_extraction_pass(
-    index: VectorStoreIndex, agent, queries: List[str], journal_id: str
+        index: VectorStoreIndex, agent, queries: List[str], journal_id: str
 ) -> BaseModel:
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
@@ -57,16 +57,11 @@ async def run_extraction_pass(
             f"[{journal_id}] Retrieval partially failed — {retrieval.failure_count}/{len(queries)} queries errored"
         )
 
-    context_str = assemble_context(retrieval.nodes)
-    existing_ids = set(n.node.node_id for n in retrieval.nodes)
-
-    prompt = f"Extract metadata from Journal '{journal_id}' using the following retrieved context:\n\n{context_str}"
-
+    deps = JournalSourcesDeps(
+        index=index, journal_id=journal_id, context_nodes=retrieval.nodes
+    )
     try:
-        deps = JournalSearchDeps(
-            index=index, journal_id=journal_id, existing_node_ids=existing_ids
-        )
-        result = await agent.run(prompt, deps=deps)
+        result = await agent.run(deps=deps)
         return result.output
     except ValidationError as e:
         logger.error(f"[{journal_id}] Validation error during extraction: {e}")
@@ -122,6 +117,7 @@ if __name__ == "__main__":
     from db import Indexer
     from db import MongoDBManager
 
+
     async def main():
         parser = argparse.ArgumentParser(
             description="Run extraction pipeline for a publisher"
@@ -160,5 +156,6 @@ if __name__ == "__main__":
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
+
 
     asyncio.run(main())
