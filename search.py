@@ -28,28 +28,23 @@ class JournalSourcesDeps:
         Args:
             nodes: Nodes to format. Formats all nodes present in `context_nodes` by default.
         """
-        context_parts = []
-
-        if nodes is None:
-            # nodes not passed, fallback to all
-            nodes = self.context_nodes
-
-        for node in nodes:
+        target = nodes if nodes is not None else self.context_nodes
+        parts = []
+        for node in target:
             source = node.node.metadata.get("source_uri", "Unknown Source")
-            formatted_chunk = f"--- [Source: {source}] ---\n{node.node.text}\n"
-            context_parts.append(formatted_chunk)
-
-        return "\n".join(context_parts)
+            parts.append(f"--- [Source: {source}] ---\n{node.node.text}\n")
+        return "\n".join(parts)
 
     def node_ids(self) -> set[str]:
         """Returns the set of node IDs currently in context."""
-        return set(n.node.node_id for n in self.context_nodes)
+        return {n.node.node_id for n in self.context_nodes}
 
     def extend_nodes(self, nodes: list[NodeWithScore]) -> list[NodeWithScore]:
         """Extends the provided nodes to the context, ignoring any that are already present. Returns the list of new nodes added."""
-        new_nodes = list(filter(lambda n: n.node.node_id not in self.node_ids(), nodes))
-        self.context_nodes.extend(new_nodes)
-        return new_nodes
+        existing_ids = self.node_ids()
+        added = [n for n in nodes if n.node.node_id not in existing_ids]
+        self.context_nodes.extend(added)
+        return added
 
 
 @dataclass
@@ -70,10 +65,10 @@ class RetrievalResult:
 
 
 def retrieve_for_pass(
-        index: object,
-        queries: List[str],
-        journal_id: str,
-        top_k: int = 2,
+    index: object,
+    queries: List[str],
+    journal_id: str,
+    top_k: int = 2,
 ) -> RetrievalResult:
     """Performs targeted queries filtered by journal_id, with per-query resilience."""
     retriever = build_retriever(index, journal_id, top_k)
@@ -128,10 +123,13 @@ async def journal_search(ctx: RunContext[JournalSourcesDeps], query: str) -> str
         results = build_retriever(index, journal_id).retrieve(query)
         if not results:
             return "No results found for this query."
+
         new_nodes = ctx.deps.extend_nodes(results)
         if not new_nodes:
-            return "Query gave no new results."
-        return ctx.deps.format_nodes(new_nodes)
+            return "Search completed: No new information found to add to context."
+
+        return f"Found {len(new_nodes)} results:\n\n{ctx.deps.format_nodes(new_nodes)}"
+
     except Exception:
         logger.exception("retrieval tool failed for query: %s", query)
         return "Search failed internally due to an error."
