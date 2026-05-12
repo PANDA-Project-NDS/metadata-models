@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -10,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 
-from db import MongoDBManager
+from db import MetadataStore, mongo_connection
 
 
 def is_filled(value) -> bool:
@@ -74,56 +73,58 @@ def pct_color(pct: float) -> str:
 
 def main():
     load_dotenv()
-    manager = MongoDBManager(os.environ["MONGODB_URI"])
-    collection = manager.get_collection(os.environ["MONGO_METADATA_COLLECTION"])
 
-    total = collection.count_documents({})
-    if total == 0:
-        print("No documents found in journal_metadata.")
-        return
+    with mongo_connection() as client:
+        meta = MetadataStore(client)
+        collection = meta.get_collection(meta.metadata_collection)
 
-    # Accumulate: field_path -> count of filled
-    field_counts: dict[str, int] = {}
-    for doc in collection.find():
-        leafs = flatten_doc(doc)
-        for path, filled in leafs.items():
-            field_counts[path] = field_counts.get(path, 0) + (1 if filled else 0)
+        total = collection.count_documents({})
+        if total == 0:
+            print("No documents found in journal_metadata.")
+            return
 
-    # Build sorted rows
-    rows = []
-    for path, count in field_counts.items():
-        pct = count / total * 100
-        rows.append((path, count, pct))
+        # Accumulate: field_path -> count of filled
+        field_counts: dict[str, int] = {}
+        for doc in collection.find():
+            leafs = flatten_doc(doc)
+            for path, filled in leafs.items():
+                field_counts[path] = field_counts.get(path, 0) + (1 if filled else 0)
 
-    rows.sort(key=lambda r: r[0])
+        # Build sorted rows
+        rows = []
+        for path, count in field_counts.items():
+            pct = count / total * 100
+            rows.append((path, count, pct))
 
-    # Build HTML
-    html_parts = [
-        "<!DOCTYPE html>",
-        "<html><head><meta charset='utf-8'>",
-        "<style>",
-        "body { font-family: monospace; margin: 20px; }",
-        "table { border-collapse: collapse; }",
-        "th, td { padding: 6px 12px; border: 1px solid #ccc; text-align: left; }",
-        "th { background: #333; color: #fff; }",
-        ".pct { text-align: center; font-weight: bold; }",
-        "</style></head><body>",
-        f"<h2>Field Coverage — {total} documents</h2>",
-        "<table><tr><th>Field</th><th>Count</th><th>Percentage</th></tr>",
-    ]
-    for path, count, pct in rows:
-        bg = pct_color(pct)
-        html_parts.append(
-            f"<tr><td>{path}</td><td>{count}</td>"
-            f"<td class='pct' style='background:{bg}'>{pct:.1f}%</td></tr>"
-        )
-    html_parts.append("</table></body></html>")
+        rows.sort(key=lambda r: r[0])
 
-    html = "\n".join(html_parts)
-    output_path = "field_coverage.html"
-    with open(output_path, "w") as f:
-        f.write(html)
-    print(f"Written: {output_path}")
+        # Build HTML
+        html_parts = [
+            "<!DOCTYPE html>",
+            "<html><head><meta charset='utf-8'>",
+            "<style>",
+            "body { font-family: monospace; margin: 20px; }",
+            "table { border-collapse: collapse; }",
+            "th, td { padding: 6px 12px; border: 1px solid #ccc; text-align: left; }",
+            "th { background: #333; color: #fff; }",
+            ".pct { text-align: center; font-weight: bold; }",
+            "</style></head><body>",
+            f"<h2>Field Coverage — {total} documents</h2>",
+            "<table><tr><th>Field</th><th>Count</th><th>Percentage</th></tr>",
+        ]
+        for path, count, pct in rows:
+            bg = pct_color(pct)
+            html_parts.append(
+                f"<tr><td>{path}</td><td>{count}</td>"
+                f"<td class='pct' style='background:{bg}'>{pct:.1f}%</td></tr>"
+            )
+        html_parts.append("</table></body></html>")
+
+        html = "\n".join(html_parts)
+        output_path = "field_coverage.html"
+        with open(output_path, "w") as f:
+            f.write(html)
+        print(f"Written: {output_path}")
 
 
 if __name__ == "__main__":

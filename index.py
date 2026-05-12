@@ -3,12 +3,10 @@
 
 import argparse
 import logging
-import os
-
-from db import Indexer
-from db import MongoDBManager
 
 from dotenv import load_dotenv
+
+from db import DocumentStore, Indexer, mongo_connection
 
 load_dotenv()
 
@@ -45,10 +43,10 @@ def main():
 
     collection_name = args.collection
 
-    db = MongoDBManager(os.environ["MONGODB_URI"])
-    try:
+    with mongo_connection() as client:
+        store = DocumentStore(client)
         if args.clear_embeddings:
-            result = db.get_collection(collection_name).update_many(
+            result = store.get_collection(collection_name).update_many(
                 {}, {"$unset": {"embedding": ""}}
             )
             logger.info(
@@ -56,21 +54,19 @@ def main():
             )
         else:
             if args.clear:
-                result = db.get_collection(db.index_collection_name).delete_many(
+                result = store.get_collection(store.index_collection_name).delete_many(
                     {"metadata.publisher": collection_name}
                 )
                 logger.info(
-                    f"Removed {result.deleted_count} existing documents for publisher '{collection_name}' from '{db.index_collection_name}'"
+                    f"Removed {result.deleted_count} existing documents for publisher '{collection_name}' from '{store.index_collection_name}'"
                 )
 
-            indexer = Indexer(db)
+            indexer = Indexer(store)
             indexer.index_documents(
                 collection_name,
                 limit=args.limit,
                 batch_size=args.batch_size,
             )
-    finally:
-        db.close()
 
 
 if __name__ == "__main__":

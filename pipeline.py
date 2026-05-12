@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 import argparse
 import logging
-import os
 from typing import List
 
 from dotenv import load_dotenv
-from llama_index.core import Settings
-from llama_index.core import VectorStoreIndex
-from pydantic import ValidationError, BaseModel
+from llama_index.core import Settings, VectorStoreIndex
+from pydantic import BaseModel, ValidationError
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from tqdm import tqdm
 
 from agents import PASSES, make_agent
 from db import get_embed_model
 from models.journal import JournalMetadata
-from search import retrieve_for_pass, JournalSourcesDeps
+from search import JournalSourcesDeps, retrieve_for_pass
 
 load_dotenv()
 
@@ -95,8 +93,7 @@ if __name__ == "__main__":
     import asyncio
     import json
 
-    from db import Indexer
-    from db import MongoDBManager
+    from db import DocumentStore, Indexer, MetadataStore, mongo_connection
 
     async def main():
         parser = argparse.ArgumentParser(
@@ -106,33 +103,28 @@ if __name__ == "__main__":
         args = parser.parse_args()
 
         try:
-            db = MongoDBManager(os.environ["MONGODB_URI"])
-            try:
+            with mongo_connection() as client:
+                store = DocumentStore(client)
+                meta = MetadataStore(client)
+
                 # Load pre-indexed vector store (no document embedding)
-                indexer = Indexer(db)
+                indexer = Indexer(store)
                 global_index = indexer.load_vector_index()
 
                 # Query journal IDs from indexed collection, filtered by publisher
-                all_journal_ids = db.get_journal_ids(publisher=args.publisher)
+                all_journal_ids = store.get_journal_ids(publisher=args.publisher)
                 logger.info(f"Processing {len(all_journal_ids)} journals")
 
                 # Stream: process and save each journal immediately
-                metadata_collection = os.environ.get(
-                    "MONGO_METADATA_COLLECTION", "journal_metadata"
-                )
-                db.init_metadata_index(metadata_collection)
+                meta.init_metadata_index()
                 for j_id in tqdm(all_journal_ids, desc="Processing journals"):
                     metadata = await process_journal(global_index, j_id)
-                    db.save_metadata_one(
-                        collection_name=metadata_collection,
+                    meta.save_metadata_one(
                         journal_id=j_id,
                         publisher_id=args.publisher,
                         metadata=json.loads(metadata.model_dump_json()),
                     )
                     logger.info(f"Saved metadata for {j_id}")
-
-            finally:
-                db.close()
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)

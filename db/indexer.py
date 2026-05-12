@@ -7,7 +7,7 @@ from llama_index.core import VectorStoreIndex
 from llama_index.vector_stores.mongodb import MongoDBAtlasVectorSearch
 
 from .embed import get_embed_model
-from .manager import MongoDBManager
+from .documents import DocumentStore
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ def _make_ingestion_pipeline(vector_store: MongoDBAtlasVectorSearch):
 class Indexer:
     """Orchestrates vector indexing of documents stored in MongoDB."""
 
-    def __init__(self, db_manager: MongoDBManager) -> None:
-        self._db_manager = db_manager
+    def __init__(self, doc_store: DocumentStore) -> None:
+        self._doc_store = doc_store
 
     def index_documents(
         self,
@@ -51,9 +51,9 @@ class Indexer:
         """Stream raw documents, chunk, embed, and persist into the search_index collection.
         Processes in batches via IngestionPipeline."""
         vector_store = MongoDBAtlasVectorSearch(
-            mongodb_client=self._db_manager.client,
-            db_name=self._db_manager.db_name,
-            collection_name=self._db_manager.index_collection_name,
+            mongodb_client=self._doc_store.client,
+            db_name=self._doc_store.db_name,
+            collection_name=self._doc_store.index_collection_name,
             vector_index_name="vector_index",
         )
         vector_store.create_vector_search_index(
@@ -64,7 +64,7 @@ class Indexer:
         )
         ingestion = _make_ingestion_pipeline(vector_store)
 
-        src_coll = self._db_manager.get_collection(collection)
+        src_coll = self._doc_store.get_collection(collection)
         total_docs = src_coll.count_documents(
             {"metadata.html": {"$exists": True, "$ne": None}}
         ) + src_coll.count_documents({"metadata.html": {"$exists": False}})
@@ -72,28 +72,28 @@ class Indexer:
             total_docs = min(total_docs, limit * 2)
 
         doc_iter = itertools.chain(
-            self._db_manager.stream_source_documents(collection, limit),
-            self._db_manager.stream_excel_documents(collection, limit),
+            self._doc_store.stream_source_documents(collection, limit),
+            self._doc_store.stream_excel_documents(collection, limit),
         )
 
         with tqdm.tqdm(
             total=total_docs,
-            desc=f"Indexing to '{self._db_manager.index_collection_name}'",
+            desc=f"Indexing to '{self._doc_store.index_collection_name}'",
         ) as pbar:
             for batch in itertools.batched(doc_iter, batch_size):
                 ingestion.run(documents=list(batch))
                 pbar.update(len(batch))
             logger.info(
-                f"Indexing complete. {pbar.n} documents from '{collection}' processed into '{self._db_manager.index_collection_name}'."
+                f"Indexing complete. {pbar.n} documents from '{collection}' processed into '{self._doc_store.index_collection_name}'."
             )
         return VectorStoreIndex.from_vector_store(vector_store)
 
     def load_vector_index(self) -> VectorStoreIndex:
         """Load a pre-existing vector index from MongoDB. No document embedding."""
         vector_store = MongoDBAtlasVectorSearch(
-            mongodb_client=self._db_manager.client,
-            db_name=self._db_manager.db_name,
-            collection_name=self._db_manager.index_collection_name,
+            mongodb_client=self._doc_store.client,
+            db_name=self._doc_store.db_name,
+            collection_name=self._doc_store.index_collection_name,
             vector_index_name="vector_index",
         )
         return VectorStoreIndex.from_vector_store(vector_store)
