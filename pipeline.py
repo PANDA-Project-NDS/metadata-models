@@ -11,13 +11,7 @@ from pydantic import ValidationError, BaseModel
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from tqdm import tqdm
 
-from agents import (
-    basic_info_agent,
-    policies_agent,
-    fees_agent,
-    editors_agent,
-    EXTRACTION_QUERIES,
-)
+from agents import PASSES, make_agent
 from db import get_embed_model
 from models.journal import JournalMetadata
 from search import retrieve_for_pass, JournalSourcesDeps
@@ -35,7 +29,7 @@ Settings.llm = None  # We handle the LLM via Pydantic AI
 
 
 async def run_extraction_pass(
-        index: VectorStoreIndex, agent, queries: List[str], journal_id: str
+    index: VectorStoreIndex, agent, queries: List[str], journal_id: str
 ) -> BaseModel:
     """Executes a single extraction pass using specific queries, filtered by journal_id."""
     logger.info(f"[{journal_id}] Running extraction pass for queries: {queries[:1]}...")
@@ -82,30 +76,17 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
 
     logger.info(f"Starting multi-pass extraction for {journal_id}...")
 
-    basic_task = run_extraction_pass(
-        index, basic_info_agent, EXTRACTION_QUERIES["basic_info"], journal_id
-    )
-    policy_task = run_extraction_pass(
-        index, policies_agent, EXTRACTION_QUERIES["policies_submissions"], journal_id
-    )
-    fees_task = run_extraction_pass(
-        index, fees_agent, EXTRACTION_QUERIES["fees_membership"], journal_id
-    )
-    editors_task = run_extraction_pass(
-        index, editors_agent, EXTRACTION_QUERIES["editors"], journal_id
-    )
-
-    basic_data, policy_data, fees_data, editors_data = await asyncio.gather(
-        basic_task, policy_task, fees_task, editors_task
-    )
+    agents = [make_agent(p) for p in PASSES]
+    tasks = [
+        run_extraction_pass(index, agent, p.queries, journal_id)
+        for agent, p in zip(agents, PASSES)
+    ]
+    results = await asyncio.gather(*tasks)
 
     # Merge into Final Schema
-    final_metadata = JournalMetadata(
-        **basic_data.model_dump(),
-        **policy_data.model_dump(),
-        **fees_data.model_dump(),
-        **editors_data.model_dump(),
-    )
+    final_metadata = JournalMetadata()
+    for result in results:
+        final_metadata.__dict__.update(result.model_dump())
 
     return final_metadata
 
@@ -116,7 +97,6 @@ if __name__ == "__main__":
 
     from db import Indexer
     from db import MongoDBManager
-
 
     async def main():
         parser = argparse.ArgumentParser(
@@ -156,6 +136,5 @@ if __name__ == "__main__":
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}", exc_info=True)
-
 
     asyncio.run(main())

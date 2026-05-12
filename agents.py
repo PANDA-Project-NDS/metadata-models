@@ -1,46 +1,72 @@
 import os
+from dataclasses import dataclass
 
 import logfire
 from dotenv import load_dotenv
-from pydantic_ai import Agent, Tool, RunContext
+from pydantic import BaseModel
+from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.models import create_async_http_client
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from models.journal import (
     BasicInfoExtraction,
-    PoliciesExtraction,
-    FeesExtraction,
     EditorialExtraction,
+    FeesExtraction,
+    PoliciesExtraction,
 )
 from search import JournalSourcesDeps, journal_search
 
 load_dotenv()
 
-logfire.configure(send_to_logfire='if-token-present')
+logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_pydantic_ai()
 
-# --- Extraction Queries ---
 
-EXTRACTION_QUERIES = {
-    "basic_info": [
-        "Journal title, publisher, about this journal, mission, scope, sections",
-        "ISSN, print ISSN, online ISSN, indexed in, abstracting and indexing databases",
-        "Impact factor, journal metrics, citation score, cite score",
-    ],
-    "policies_submissions": [
-        "Publication frequency, issues per year, submission guidelines, author instructions, article types accepted",
-        "Peer review process, blind review, open access policy statement, copyright, quality assurance",
-        "diamond open access, community owned, open to all authors",
-        "publication languages, languages accepted",
-    ],
-    "fees_membership": [
-        "Article Processing Charge, APC, publication fees, cost, waivers, discounts, society membership, institutional membership"
-    ],
-    "editors": [
-        "Editorial board, Editor in Chief, managing editor, editorial team"
-    ],
-}
+@dataclass
+class PassConfig:
+    """RAG Extraction pass config"""
+
+    name: str
+    output_type: type[BaseModel]
+    queries: list[str]
+
+
+PASSES: list[PassConfig] = [
+    PassConfig(
+        "Info Agent",
+        BasicInfoExtraction,
+        [
+            "Journal title, publisher, about this journal, mission, scope, sections",
+            "ISSN, print ISSN, online ISSN, indexed in, abstracting and indexing databases",
+            "Impact factor, journal metrics, citation score, cite score",
+        ],
+    ),
+    PassConfig(
+        "Policies Agent",
+        PoliciesExtraction,
+        [
+            "Publication frequency, issues per year, submission guidelines, author instructions, article types accepted",
+            "Peer review process, blind review, open access policy statement, copyright, quality assurance",
+            "diamond open access, community owned, open to all authors",
+            "publication languages, languages accepted",
+        ],
+    ),
+    PassConfig(
+        "Fees Agent",
+        FeesExtraction,
+        [
+            "Article Processing Charge, APC, publication fees, cost, waivers, discounts, society membership, institutional membership",
+        ],
+    ),
+    PassConfig(
+        "Editors Agent",
+        EditorialExtraction,
+        [
+            "Editorial board, Editor in Chief, managing editor, editorial team",
+        ],
+    ),
+]
 
 # --- Prompts & Agents ---
 # Common system prompt base
@@ -76,8 +102,12 @@ def context_instructions(ctx: RunContext[JournalSourcesDeps]) -> str:
 
 llm_model = OpenAIChatModel(
     os.getenv("OPENAI_MODEL", ""),
-    provider=OpenAIProvider(os.getenv("OPENAI_API_URL"),
-                            http_client=create_async_http_client(timeout=int(os.getenv("OPENAI_HTTP_TIMEOUT", "60")))),
+    provider=OpenAIProvider(
+        os.getenv("OPENAI_API_URL"),
+        http_client=create_async_http_client(
+            timeout=int(os.getenv("OPENAI_HTTP_TIMEOUT", "60"))
+        ),
+    ),
     # profile=OpenAIModelProfile(json_schema_transformer=InlineDefsJsonSchemaTransformer)
 )
 
@@ -87,46 +117,15 @@ journal_search_tool = Tool(
     max_retries=1,
 )
 
-basic_info_agent = Agent(
-    name="Info Agent",
-    model=llm_model,
-    output_type=BasicInfoExtraction,
-    system_prompt=SYSTEM_PROMPT,
-    instructions=context_instructions,
-    output_retries=3,
-    deps_type=JournalSourcesDeps,
-    tools=[journal_search_tool],
-)
 
-policies_agent = Agent(
-    name="Policies Agent",
-    model=llm_model,
-    output_type=PoliciesExtraction,
-    system_prompt=SYSTEM_PROMPT,
-    instructions=context_instructions,
-    output_retries=3,
-    deps_type=JournalSourcesDeps,
-    tools=[journal_search_tool],
-)
-
-fees_agent = Agent(
-    name="Fees Agent",
-    model=llm_model,
-    output_type=FeesExtraction,
-    system_prompt=SYSTEM_PROMPT,
-    instructions=context_instructions,
-    output_retries=3,
-    deps_type=JournalSourcesDeps,
-    tools=[journal_search_tool],
-)
-
-editors_agent = Agent(
-    name="Editors Agent",
-    model=llm_model,
-    output_type=EditorialExtraction,
-    system_prompt=SYSTEM_PROMPT,
-    instructions=context_instructions,
-    output_retries=3,
-    deps_type=JournalSourcesDeps,
-    tools=[journal_search_tool],
-)
+def make_agent(pass_config: PassConfig) -> Agent:
+    return Agent(
+        name=pass_config.name,
+        model=llm_model,
+        output_type=pass_config.output_type,
+        system_prompt=SYSTEM_PROMPT,
+        instructions=context_instructions,
+        output_retries=3,
+        deps_type=JournalSourcesDeps,
+        tools=[journal_search_tool],
+    )
