@@ -118,7 +118,7 @@ journal_search_tool = Tool(
 )
 
 
-def make_agent(pass_config: PassConfig) -> Agent:
+def make_agent(pass_config: PassConfig) -> Agent[object, str]:
     return Agent(
         name=pass_config.name,
         model=llm_model,
