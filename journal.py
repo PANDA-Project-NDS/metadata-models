@@ -160,7 +160,7 @@ class ISSN(BaseModel):
         return v
 
 
-class MonetaryAmount(SourcedModel):
+class MonetaryAmount(BaseModel):
     """Numeric Monetary value with associated currency."""
 
     model_config = ConfigDict(extra="forbid")
@@ -188,14 +188,15 @@ class Discount(SourcedModel):
     """Information about waivers or discounts available for publication fees."""
 
     model_config = ConfigDict(extra="forbid")
-    type: Optional[Literal["waiver", "fixed", "percent"]] = Field(
-        default=None, description="Discount type label."
+    type: Literal["waiver", "fixed", "percent"] = Field(
+        ..., description="Discount type label."
     )
     amount: Optional[MonetaryAmount] = Field(
         default=None, description="Fixed monetary discount amount if applicable."
     )
+    percentage: Optional[float] = Field(default=None, description="Percentage discount amount if applicable.")
     eligibility: Optional[str] = Field(
-        default=None, description="Criteria for discount eligibility as stated."
+        default=None, description="Criteria for discount eligibility as stated (quote)."
     )
 
 
