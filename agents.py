@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logfire
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from pydantic_ai import Agent, RunContext, Tool
+from pydantic_ai import Agent, ModelSettings, RunContext, Tool
 from pydantic_ai.models import create_async_http_client
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -101,7 +101,9 @@ llm_model = OpenAIChatModel(
             timeout=int(os.getenv("OPENAI_HTTP_TIMEOUT", "60"))
         ),
     ),
-    # profile=OpenAIModelProfile(json_schema_transformer=InlineDefsJsonSchemaTransformer)
+    settings=ModelSettings(
+        temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),
+    ),
 )
 
 journal_search_tool = Tool(
