@@ -31,6 +31,16 @@ Print ISSN: 1234-5678
 Online ISSN: 9876-5432
 """
 
+ISSN_FORMAT_VARIATIONS_CONTEXT = """
+Journal Identifiers:
+Print ISSN: 12345678
+Online ISSN: eISSN 9876-5432
+"""
+
+ISSN_LINKING_CONTEXT = """
+The journal is identified by Print ISSN 1234-5678, Online ISSN 9876-5432, and Linking ISSN (ISSN-L) 2468-1357.
+"""
+
 APC_SINGLE_CONTEXT = """
 Article Processing Charge:
 Research articles: $2000 USD
@@ -41,6 +51,19 @@ Article Processing Charges:
 - Research articles: $2000 USD
 - Short papers: $1500 USD
 Waivers available for authors from low-income countries.
+"""
+
+APC_CURRENCY_MIXED_CONTEXT = """
+Fees:
+- Research articles: $2000 
+- Review articles: 1500 €
+"""
+
+APC_DISCOUNTS_COMPLEX_CONTEXT = """
+Waivers and Discounts:
+- We provide a full waiver for authors from low-income countries.
+- Members of the International Science Society receive a fixed discount of 500 EUR.
+- Early-bird submissions receive a 15% discount on the total APC.
 """
 
 EDITORIAL_CONTEXT = """

@@ -4,6 +4,7 @@ import pytest
 from fixtures.journal_docs import make_node
 
 from agents import PASSES, make_agent
+from models.journal import ISSN
 from search import JournalSourcesDeps
 from tests.evals.fixtures import (
     APC_DOUBLE_CONTEXT,
@@ -15,6 +16,10 @@ from tests.evals.fixtures import (
     POLICIES_CONTEXT,
     is_empty,
     IRRELEVANT_CONTEXT,
+    APC_CURRENCY_MIXED_CONTEXT,
+    APC_DISCOUNTS_COMPLEX_CONTEXT,
+    ISSN_FORMAT_VARIATIONS_CONTEXT,
+    ISSN_LINKING_CONTEXT,
 )
 
 
@@ -154,27 +159,21 @@ async def test_empty_context_returns_empty(eval_model, mock_index, mock_retrieve
     assert is_empty(output.facts)
     assert is_empty(output.metrics)
 
-async def test_irrelevant_context_returns_empty(
-        eval_model, mock_index, mock_retriever
-    ):
-        """Info Agent returns all fields null/empty when context is irrelevant"""
-        retriever = mock_retriever({})
-        idx = mock_index(retriever)
-        nodes = [
-            make_node(IRRELEVANT_CONTEXT, node_id="irrelevant-1", source_uri="home.html")
-        ]
-        output = await run_pass(
-            0,
-            eval_model,
-            idx,
-            nodes
-        )
 
-        assert output.title is None
-        assert is_empty(output.issn)
-        assert output.scope is None
-        assert is_empty(output.facts)
-        assert is_empty(output.metrics)
+async def test_irrelevant_context_returns_empty(eval_model, mock_index, mock_retriever):
+    """Info Agent returns all fields null/empty when context is irrelevant"""
+    retriever = mock_retriever({})
+    idx = mock_index(retriever)
+    nodes = [
+        make_node(IRRELEVANT_CONTEXT, node_id="irrelevant-1", source_uri="home.html")
+    ]
+    output = await run_pass(0, eval_model, idx, nodes)
+
+    assert output.title is None
+    assert is_empty(output.issn)
+    assert output.scope is None
+    assert is_empty(output.facts)
+    assert is_empty(output.metrics)
 
 
 async def test_only_editors_extracted(eval_model, mock_index, mock_retriever):
@@ -207,8 +206,79 @@ async def test_only_editors_extracted(eval_model, mock_index, mock_retriever):
     assert isinstance(fees, FeesExtraction)
     assert is_empty(fees.pricing)
 
+    # ... existing code ...
     editors = await run_pass(3, eval_model, idx, nodes)
     assert isinstance(editors, EditorialExtraction)
     assert len(editors.editors) >= 1
     editor_names = [e.name for e in editors.editors if e.name]
     assert len(editor_names) >= 1
+
+
+async def test_extract_mixed_currencies(eval_model, mock_index, mock_retriever):
+    """Fees Agent correctly maps $ and € to USD and EUR."""
+    nodes = [
+        make_node(APC_CURRENCY_MIXED_CONTEXT, node_id="apc-1", source_uri="fees.html")
+    ]
+    retriever = mock_retriever({})
+    idx = mock_index(retriever)
+    output = await run_pass(2, eval_model, idx, nodes)
+
+    apcs = output.pricing.article_processing_charges
+    currencies = [a.fee.currency for a in apcs]
+    assert "USD" in currencies
+    assert "EUR" in currencies
+
+
+async def test_extract_discount_types(eval_model, mock_index, mock_retriever):
+    """Fees Agent identifies waiver, fixed, and percentage discounts."""
+    nodes = [
+        make_node(
+            APC_DISCOUNTS_COMPLEX_CONTEXT, node_id="discounts-1", source_uri="fees.html"
+        )
+    ]
+    retriever = mock_retriever({})
+    idx = mock_index(retriever)
+    output = await run_pass(2, eval_model, idx, nodes)
+
+    discounts = output.pricing.discounts
+    types = [d.type for d in discounts]
+    assert "waiver" in types
+    assert "fixed" in types
+    assert "percent" in types
+
+    # Verify percentage value
+    perc_discount = next(d for d in discounts if d.type == "percent")
+    assert perc_discount.percentage == 15.0
+
+    # Verify fixed value
+    fixed_discount = next(d for d in discounts if d.type == "fixed")
+    assert fixed_discount.amount.value == 500
+    assert fixed_discount.amount.currency == "EUR"
+
+
+async def test_extract_issn_normalization(eval_model, mock_index, mock_retriever):
+    """Info Agent normalizes non-hyphenated ISSNs to NNNN-NNNN format."""
+    nodes = [
+        make_node(
+            ISSN_FORMAT_VARIATIONS_CONTEXT, node_id="issn-1", source_uri="about.html"
+        )
+    ]
+    retriever = mock_retriever({})
+    idx = mock_index(retriever)
+    output = await run_pass(0, eval_model, idx, nodes)
+
+    assert output.issn.print is not None
+    assert output.issn.print.value == "1234-5678"
+    assert output.issn.online is not None
+    assert output.issn.online.value == "9876-5432"
+
+
+async def test_extract_linking_issn(eval_model, mock_index, mock_retriever):
+    """Info Agent extracts the Linking ISSN (ISSN-L)."""
+    nodes = [make_node(ISSN_LINKING_CONTEXT, node_id="issn-1", source_uri="about.html")]
+    retriever = mock_retriever({})
+    idx = mock_index(retriever)
+    output = await run_pass(0, eval_model, idx, nodes)
+
+    assert output.issn.linking is not None
+    assert output.issn.linking.value == "2468-1357"
