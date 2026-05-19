@@ -145,7 +145,7 @@ class ISSN(BaseModel):
     online: Optional[SourcedValue[str]] = Field(
         default=None, description="Online ISSN in NNNN-NNNN form."
     )
-    linking: Optional[str] = Field(
+    linking: Optional[SourcedValue[str]] = Field(
         default=None, description="Linking ISSN (ISSN-L) in NNNN-NNNN form."
     )
 
