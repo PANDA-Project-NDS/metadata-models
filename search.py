@@ -18,9 +18,10 @@ class JournalSourcesDeps:
     index: BaseIndex
     journal_id: str
     context_nodes: list[NodeWithScore] = field(default_factory=list)
+    seen_node_ids: set[str] = field(default_factory=set)
 
     def context_instructions(self) -> str:
-        return f"Extract metadata from Journal '{self.journal_id}' using the following retrieved context:\n\n{self.format_nodes()}"
+        return f"Extract metadata from a Journal using the following retrieved context:\n\n{self.format_nodes()}"
 
     def format_nodes(self, nodes: list[NodeWithScore] | None = None) -> str:
         """Formats the retrieved nodes into a single context string with source citations.
@@ -36,14 +37,15 @@ class JournalSourcesDeps:
         return "\n".join(parts)
 
     def node_ids(self) -> set[str]:
-        """Returns the set of node IDs currently in context."""
-        return {n.node.node_id for n in self.context_nodes}
+        """Returns the set of all node IDs — both initial context and search results."""
+        return {n.node.node_id for n in self.context_nodes} | self.seen_node_ids
 
     def extend_nodes(self, nodes: list[NodeWithScore]) -> list[NodeWithScore]:
-        """Extends the provided nodes to the context, ignoring any that are already present. Returns the list of new nodes added."""
+        """Tracks new nodes for deduplication. Does NOT mutate context_nodes.
+        Returns the list of new nodes added to tracking."""
         existing_ids = self.node_ids()
         added = [n for n in nodes if n.node.node_id not in existing_ids]
-        self.context_nodes.extend(added)
+        self.seen_node_ids.update(n.node.node_id for n in added)
         return added
 
 
