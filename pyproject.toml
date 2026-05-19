@@ -16,3 +16,15 @@ dependencies = [
     "tqdm>=4.67.3",
     "trafilatura>=2.0.0",
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "dirty-equals>=0.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["tests"]
