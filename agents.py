@@ -69,30 +69,23 @@ PASSES: list[PassConfig] = [
 ]
 
 # --- Prompts & Agents ---
-# Common system prompt base
-SEARCH_FALLBACK_PROMPT = """
-Search Tool:
-- If the provided context does not contain the information you need, call the `Journal Search` tool to find more relevant 
-documents about this journal.
-- Use only if the information is not present in the provided context. Do not use it if the information is already present.
-- Use it to fill the blanks, do not default to null output.
-- It only searches in documents related to the current journal.
-- Create a specific search query related to the missing information.
-- After calling the search tool, you will receive additional context chunks. Re-analyze all the context (previous + new) to extract the information.
+SEARCH_RULES = """
+5. SEARCH FIRST: Before outputting null or an empty list for any field, you MUST call the `Journal Search` tool to look for additional context. Never give up on a field without searching. Retry search once if needed.
+6. SEARCH QUERIES: When calling `Journal Search`, craft a specific query targeting the exact piece of information you're missing (e.g., "ISSN", "APC fee", "editorial board").
+7. RE-ANALYZE: After receiving search results, combine them with the original context and extract all available information.
 """
 
-SYSTEM_PROMPT = f"""
+SYSTEM_PROMPT = """
 You are an expert data extraction assistant. Your task is to extract highly accurate, structured metadata for an academic journal based ONLY on the provided context chunks.
 
 CRITICAL RULES:
 1. NO HALLUCINATION: If a piece of information is not explicitly stated, you MUST output null or an empty list. Do not guess or infer.
 2. VERBATIM EVIDENCE: For every extracted value, you must provide the exact, verbatim quote from the text in the `quote` field. 
 3. SOURCE TRACKING: The context will be provided in blocks separated by "--- [Source: <filename>] ---". You MUST copy the exact <filename> into the `source` field for your evidence.
-4. STRUCTURED OUTPUT: Always respond with JSON matching the schema specified by the `final_result` output tool without returning extra json keys.
+4. OUTPUT TOOL: You MUST use the `final_result` tool to submit your extraction. Do not output JSON as text, do not include explanations or reasoning outside the tool call. Call `final_result` with the structured data directly.
+{search_rules}
 
-{SEARCH_FALLBACK_PROMPT}
-
-Read the context carefully and extract the data into the requested JSON schema. Focus only on the fields present in the output schema.
+Read the context carefully, extract the data and call `final_result`. Focus only on the fields present in the output schema.
 """
 
 
@@ -114,18 +107,26 @@ llm_model = OpenAIChatModel(
 journal_search_tool = Tool(
     journal_search,
     name="Journal Search",
+    description="Search for additional context, scoped to this journal only.",
     max_retries=1,
 )
 
 
-def make_agent(pass_config: PassConfig) -> Agent[object, str]:
+def make_agent(
+    pass_config: PassConfig,
+    tools: list[Tool] | None = None,
+    include_search: bool = True,
+) -> Agent[object, str]:
+    prompt = SYSTEM_PROMPT.format(search_rules=SEARCH_RULES if include_search else "")
     return Agent(
         name=pass_config.name,
         model=llm_model,
         output_type=pass_config.output_type,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=prompt,
         instructions=context_instructions,
         output_retries=3,
         deps_type=JournalSourcesDeps,
-        tools=[journal_search_tool],
+        tools=tools
+        if tools is not None
+        else ([journal_search_tool] if include_search else []),
     )
