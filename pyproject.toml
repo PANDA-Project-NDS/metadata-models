@@ -24,6 +24,9 @@ test = [
     "dirty-equals>=0.8",
 ]
 
+[tool.uv.workspace]
+members = ["models"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
