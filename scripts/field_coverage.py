@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -74,18 +75,29 @@ def pct_color(pct: float) -> str:
 def main():
     load_dotenv()
 
+    parser = argparse.ArgumentParser(
+        description="Report field coverage percentages for the journal_metadata collection."
+    )
+    parser.add_argument(
+        "--publisher",
+        default=None,
+        help="Filter by publisher_id in MongoDB",
+    )
+    args = parser.parse_args()
+
     with mongo_connection() as client:
         meta = MetadataStore(client)
         collection = meta.get_collection(meta.metadata_collection)
 
-        total = collection.count_documents({})
+        query = {"publisher_id": args.publisher} if args.publisher else {}
+        total = collection.count_documents(query)
         if total == 0:
             print("No documents found in journal_metadata.")
             return
 
         # Accumulate: field_path -> count of filled
         field_counts: dict[str, int] = {}
-        for doc in collection.find():
+        for doc in collection.find(query):
             leafs = flatten_doc(doc)
             for path, filled in leafs.items():
                 field_counts[path] = field_counts.get(path, 0) + (1 if filled else 0)
@@ -99,6 +111,9 @@ def main():
         rows.sort(key=lambda r: r[0])
 
         # Build HTML
+        heading = f"Field Coverage — {total} documents"
+        if args.publisher:
+            heading += f" (publisher: {args.publisher})"
         html_parts = [
             "<!DOCTYPE html>",
             "<html><head><meta charset='utf-8'>",
@@ -109,7 +124,7 @@ def main():
             "th { background: #333; color: #fff; }",
             ".pct { text-align: center; font-weight: bold; }",
             "</style></head><body>",
-            f"<h2>Field Coverage — {total} documents</h2>",
+            f"<h2>{heading}</h2>",
             "<table><tr><th>Field</th><th>Count</th><th>Percentage</th></tr>",
         ]
         for path, count, pct in rows:
@@ -121,7 +136,7 @@ def main():
         html_parts.append("</table></body></html>")
 
         html = "\n".join(html_parts)
-        output_path = "field_coverage.html"
+        output_path = f"field_coverage.{args.publisher}.html"
         with open(output_path, "w") as f:
             f.write(html)
         print(f"Written: {output_path}")

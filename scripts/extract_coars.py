@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Extract leaf node labels from the COARS Resource Types XML.
 
 Reads example_schema/resource_types_for_dspace_en.xml and outputs the leaf
