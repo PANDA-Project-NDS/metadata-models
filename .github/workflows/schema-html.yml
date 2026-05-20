@@ -20,7 +20,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv sync --system
+        run: uv sync
 
       - name: Generate HTML
         run: python scripts/metadata_schema_html.py
