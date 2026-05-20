@@ -20,6 +20,10 @@ class JournalSourcesDeps:
     context_nodes: list[NodeWithScore] = field(default_factory=list)
     seen_node_ids: set[str] = field(default_factory=set)
 
+    def __post_init__(self, *args, **kwargs):
+        # add context nodes into seen nodes set
+        self.seen_node_ids = set(node.node.node_id for node in self.context_nodes)
+
     def context_instructions(self) -> str:
         return f"Extract metadata from a Journal using the following retrieved context:\n\n{self.format_nodes()}"
 
@@ -36,15 +40,10 @@ class JournalSourcesDeps:
             parts.append(f"--- [Source: {source}] ---\n{node.node.text}\n")
         return "\n".join(parts)
 
-    def node_ids(self) -> set[str]:
-        """Returns the set of all node IDs — both initial context and search results."""
-        return {n.node.node_id for n in self.context_nodes} | self.seen_node_ids
-
     def extend_nodes(self, nodes: list[NodeWithScore]) -> list[NodeWithScore]:
         """Tracks new nodes for deduplication. Does NOT mutate context_nodes.
         Returns the list of new nodes added to tracking."""
-        existing_ids = self.node_ids()
-        added = [n for n in nodes if n.node.node_id not in existing_ids]
+        added = [n for n in nodes if n.node.node_id not in self.seen_node_ids]
         self.seen_node_ids.update(n.node.node_id for n in added)
         return added
 
@@ -97,7 +96,7 @@ def retrieve_for_pass(
     )
 
 
-def build_retriever(index: BaseIndex, journal_id: str, top_k: int = 2) -> BaseRetriever:
+def build_retriever(index: BaseIndex, journal_id: str, top_k: int = 3) -> BaseRetriever:
     """Build a LlamaIndex retriever scoped to journal_id using MetadataFilters."""
     filters = MetadataFilters(
         filters=[ExactMatchFilter(key="journal_id", value=journal_id)]
