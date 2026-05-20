@@ -2,13 +2,23 @@ import re
 from typing import List, Optional, TypeVar, Generic, Literal
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from .vocab import (
-    Frequency,
-    ReviewType,
-    ArticleTypeValue,
-    SupportedCurrency,
-    IndexingService,
-)
+
+try:
+    from .vocab import (
+        Frequency,
+        ReviewType,
+        ArticleTypeValue,
+        SupportedCurrency,
+        IndexingService,
+    )
+except ImportError:
+    from vocab import (
+        Frequency,
+        ReviewType,
+        ArticleTypeValue,
+        SupportedCurrency,
+        IndexingService,
+    )
 
 T = TypeVar("T")
 
@@ -194,7 +204,9 @@ class Discount(SourcedModel):
     amount: Optional[MonetaryAmount] = Field(
         default=None, description="Fixed monetary discount amount if applicable."
     )
-    percentage: Optional[float] = Field(default=None, description="Percentage discount amount if applicable.")
+    percentage: Optional[float] = Field(
+        default=None, description="Percentage discount amount if applicable."
+    )
     eligibility: Optional[str] = Field(
         default=None, description="Criteria for discount eligibility as stated (quote)."
     )
