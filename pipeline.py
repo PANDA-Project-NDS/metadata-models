@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import asyncio
 import argparse
+import json
 import logging
 from typing import List
 
@@ -70,8 +72,6 @@ async def run_extraction_pass(
 
 async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMetadata:
     """End-to-end multi-pass pipeline for a single journal ID using the global index."""
-    import asyncio
-
     logger.info(f"Starting multi-pass extraction for {journal_id}...")
 
     agents = [make_agent(p) for p in PASSES]
@@ -82,17 +82,13 @@ async def process_journal(index: VectorStoreIndex, journal_id: str) -> JournalMe
     results = await asyncio.gather(*tasks)
 
     # Merge into Final Schema
-    final_metadata = JournalMetadata()
+    merged = {}
     for result in results:
-        final_metadata.__dict__.update(result.model_dump())
-
-    return final_metadata
+        merged.update(result.model_dump())
+    return JournalMetadata.model_validate(merged)
 
 
 if __name__ == "__main__":
-    import asyncio
-    import json
-
     from db import DocumentStore, Indexer, MetadataStore, mongo_connection
 
     async def main():
