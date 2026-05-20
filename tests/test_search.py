@@ -3,14 +3,11 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from llama_index.core.schema import NodeWithScore
 from pydantic_ai import RunContext
 
 from search import (
     JournalSourcesDeps,
-    RetrievalResult,
     retrieve_for_pass,
-    build_retriever,
     journal_search,
 )
 from fixtures.journal_docs import make_node

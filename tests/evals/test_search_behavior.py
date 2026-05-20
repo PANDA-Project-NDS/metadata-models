@@ -51,7 +51,7 @@ def make_limited_search_tool(max_calls=3):
 
 
 async def test_search_retries_on_irrelevant_result(
-    eval_model, mock_index, mock_retriever
+    subtests: pytest.Subtests, eval_model, mock_index, mock_retriever
 ):
     """When first search returns irrelevant data, agent retries and extracts ISSN on second call."""
     nodes = [
@@ -86,11 +86,14 @@ async def test_search_retries_on_irrelevant_result(
             result = await agent.run(deps=deps)
 
     tool_calls = count_search_calls(messages)
-    assert 1 < tool_calls <= 3, (
-        f"Agent should retry search at least once but not exceed limit. Got {tool_calls} calls."
-    )
-    assert result.output.issn is not None
-    assert result.output.issn.print.value == "1234-5678"
+    assert tool_calls >= 1, "Agent did not call Journal Search tool"
+
+    with subtests.test("search retry count"):
+        assert 1 < tool_calls <= 3
+
+    with subtests.test("issn extracted"):
+        assert result.output.issn is not None
+        assert result.output.issn.print.value == "1234-5678"
 
 
 async def test_search_returns_nothing_returns_empty(
@@ -120,7 +123,9 @@ async def test_search_returns_nothing_returns_empty(
     assert is_empty(result.output.metrics)
 
 
-async def test_search_respects_max_calls(eval_model, mock_index, mock_retriever):
+async def test_search_respects_max_calls(
+    subtests: pytest.Subtests, eval_model, mock_index, mock_retriever
+):
     """Agent stops searching after hitting the call limit, does not hallucinate data."""
     nodes = [
         make_node(IRRELEVANT_CONTEXT, node_id="irrelevant-1", source_uri="home.html")
@@ -150,9 +155,13 @@ async def test_search_respects_max_calls(eval_model, mock_index, mock_retriever)
 
     tool_calls = count_search_calls(messages)
     assert tool_calls >= 1, "Agent did not call Journal Search tool"
-    assert tool_calls <= 3
-    assert is_empty(result.output.issn)
-    assert result.output.title is None
+
+    with subtests.test("search within limit"):
+        assert tool_calls <= 3
+
+    with subtests.test("no hallucination"):
+        assert is_empty(result.output.issn)
+        assert result.output.title is None
 
 
 async def test_search_finds_issn_from_irrelevant_context(
@@ -185,7 +194,7 @@ async def test_search_finds_issn_from_irrelevant_context(
 
 
 async def test_search_finds_apc_from_irrelevant_context(
-    eval_model, mock_index, mock_retriever
+    subtests: pytest.Subtests, eval_model, mock_index, mock_retriever
 ):
     """Fees Agent finds APC data via search when initial context is irrelevant, then extracts it."""
     nodes = [
@@ -216,10 +225,13 @@ async def test_search_finds_apc_from_irrelevant_context(
     assert tool_calls >= 1, "Agent did not call Journal Search tool"
 
     assert result.output.pricing is not None
-    assert len(result.output.pricing.article_processing_charges) >= 1
-    apc_2000 = [
-        a
-        for a in result.output.pricing.article_processing_charges
-        if a.fee.value == 2000 and a.fee.currency == "USD"
-    ]
-    assert len(apc_2000) >= 1
+
+    with subtests.test("has APCs"):
+        assert len(result.output.pricing.article_processing_charges) >= 1
+
+    with subtests.test("contains $2000 USD"):
+        apcs = result.output.pricing.article_processing_charges
+        apc = next(
+            (a for a in apcs if a.fee.value == 2000 and a.fee.currency == "USD"), None
+        )
+        assert apc is not None

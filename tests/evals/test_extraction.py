@@ -1,25 +1,22 @@
-from unittest.mock import MagicMock
-
 import pytest
 from fixtures.journal_docs import make_node
 
 from agents import PASSES, make_agent
-from models.journal import ISSN
 from search import JournalSourcesDeps
 from tests.evals.fixtures import (
+    APC_CURRENCY_MIXED_CONTEXT,
+    APC_DISCOUNTS_COMPLEX_CONTEXT,
     APC_DOUBLE_CONTEXT,
     APC_SINGLE_CONTEXT,
     EDITORIAL_CONTEXT,
+    IRRELEVANT_CONTEXT,
     ISSN_BOTH_CONTEXT,
     ISSN_CONTEXT,
+    ISSN_FORMAT_VARIATIONS_CONTEXT,
+    ISSN_LINKING_CONTEXT,
     ISSN_PRINT_ONLY_CONTEXT,
     POLICIES_CONTEXT,
     is_empty,
-    IRRELEVANT_CONTEXT,
-    APC_CURRENCY_MIXED_CONTEXT,
-    APC_DISCOUNTS_COMPLEX_CONTEXT,
-    ISSN_FORMAT_VARIATIONS_CONTEXT,
-    ISSN_LINKING_CONTEXT,
 )
 
 
@@ -47,7 +44,7 @@ async def test_extract_print_issn(eval_model, mock_index, mock_retriever):
     idx = mock_index(retriever)
     output = await run_pass(0, eval_model, idx, nodes)
 
-    assert output.issn is not None
+    assert output.issn.print is not None
     assert output.issn.print.value == "1234-5678"
 
 
@@ -65,15 +62,22 @@ async def test_extract_issn_evidence(eval_model, mock_index, mock_retriever):
     assert output.issn.print.evidence.source == "about.html"
 
 
-async def test_extract_both_issns(eval_model, mock_index, mock_retriever):
+async def test_extract_both_issns(
+    subtests: pytest.Subtests, eval_model, mock_index, mock_retriever
+):
     """Info Agent extracts both print and online ISSN when both are present in context."""
     nodes = [make_node(ISSN_BOTH_CONTEXT, node_id="issn-1", source_uri="about.html")]
     retriever = mock_retriever({})
     idx = mock_index(retriever)
     output = await run_pass(0, eval_model, idx, nodes)
 
-    assert output.issn.print.value == "1234-5678"
-    assert output.issn.online.value == "9876-5432"
+    with subtests.test("issn_type: print"):
+        assert output.issn.print is not None
+        assert output.issn.print.value == "1234-5678"
+
+    with subtests.test("issn_type: online"):
+        assert output.issn.online is not None
+        assert output.issn.online.value == "9876-5432"
 
 
 async def test_extract_single_apc(eval_model, mock_index, mock_retriever):
@@ -102,17 +106,41 @@ async def test_extract_apc_evidence(eval_model, mock_index, mock_retriever):
     assert apc.evidence.source == "fees.html"
 
 
-async def test_extract_multiple_apcs(eval_model, mock_index, mock_retriever):
+async def test_extract_multiple_apcs(
+    subtests: pytest.Subtests, eval_model, mock_index, mock_retriever
+):
     """Fees Agent extracts both APC values when context lists multiple fees."""
     nodes = [make_node(APC_DOUBLE_CONTEXT, node_id="apc-1", source_uri="fees.html")]
     retriever = mock_retriever({})
     idx = mock_index(retriever)
     output = await run_pass(2, eval_model, idx, nodes)
 
-    assert len(output.pricing.article_processing_charges) >= 2
-    values = [a.fee.value for a in output.pricing.article_processing_charges]
-    assert 2000 in values
-    assert 1500 in values
+    with subtests.test("has >= 2 APCs"):
+        assert len(output.pricing.article_processing_charges) >= 2
+
+    with subtests.test("contains $2000 USD"):
+        apc = next(
+            (
+                a
+                for a in output.pricing.article_processing_charges
+                if a.fee.value == 2000
+            ),
+            None,
+        )
+        assert apc is not None
+        assert apc.fee.currency == "USD"
+
+    with subtests.test("contains $1500 USD"):
+        apc = next(
+            (
+                a
+                for a in output.pricing.article_processing_charges
+                if a.fee.value == 1500
+            ),
+            None,
+        )
+        assert apc is not None
+        assert apc.fee.currency == "USD"
 
 
 async def test_schema_valid_all_passes(eval_model, mock_index, mock_retriever):
@@ -229,7 +257,9 @@ async def test_extract_mixed_currencies(eval_model, mock_index, mock_retriever):
     assert "EUR" in currencies
 
 
-async def test_extract_discount_types(eval_model, mock_index, mock_retriever):
+async def test_extract_discount_types(
+    subtests: pytest.Subtests, eval_model, mock_index, mock_retriever
+):
     """Fees Agent identifies waiver, fixed, and percentage discounts."""
     nodes = [
         make_node(
@@ -240,23 +270,25 @@ async def test_extract_discount_types(eval_model, mock_index, mock_retriever):
     idx = mock_index(retriever)
     output = await run_pass(2, eval_model, idx, nodes)
 
+    assert output.pricing.discounts is not None
     discounts = output.pricing.discounts
-    types = [d.type for d in discounts]
-    assert "waiver" in types
-    assert "fixed" in types
-    assert "percent" in types
 
-    # Verify percentage value
-    perc_discount = next(d for d in discounts if d.type == "percent")
-    assert perc_discount.percentage == 15.0
+    with subtests.test("has waiver"):
+        assert "waiver" in [d.type for d in discounts]
 
-    # Verify fixed value
-    fixed_discount = next(d for d in discounts if d.type == "fixed")
-    assert fixed_discount.amount.value == 500
-    assert fixed_discount.amount.currency == "EUR"
+    with subtests.test("percent discount"):
+        perc = next(d for d in discounts if d.type == "percent")
+        assert perc.percentage == 15.0
+
+    with subtests.test("fixed discount"):
+        fixed = next(d for d in discounts if d.type == "fixed")
+        assert fixed.amount.value == 500
+        assert fixed.amount.currency == "EUR"
 
 
-async def test_extract_issn_normalization(eval_model, mock_index, mock_retriever):
+async def test_extract_issn_normalization(
+    subtests: pytest.Subtests, eval_model, mock_index, mock_retriever
+):
     """Info Agent normalizes non-hyphenated ISSNs to NNNN-NNNN format."""
     nodes = [
         make_node(
@@ -267,10 +299,13 @@ async def test_extract_issn_normalization(eval_model, mock_index, mock_retriever
     idx = mock_index(retriever)
     output = await run_pass(0, eval_model, idx, nodes)
 
-    assert output.issn.print is not None
-    assert output.issn.print.value == "1234-5678"
-    assert output.issn.online is not None
-    assert output.issn.online.value == "9876-5432"
+    with subtests.test("issn_type: print"):
+        assert output.issn.print is not None
+        assert output.issn.print.value == "1234-5678"
+
+    with subtests.test("issn_type: online"):
+        assert output.issn.online is not None
+        assert output.issn.online.value == "9876-5432"
 
 
 async def test_extract_linking_issn(eval_model, mock_index, mock_retriever):

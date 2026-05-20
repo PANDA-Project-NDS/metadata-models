@@ -4,12 +4,11 @@ import pytest
 from llama_index.core import VectorStoreIndex
 from llama_index.core.base.base_retriever import BaseRetriever
 from llama_index.core.schema import NodeWithScore
-
 from pydantic_ai import models
 
-models.ALLOW_MODEL_REQUESTS = False
-
 from fixtures.journal_docs import make_node
+
+models.ALLOW_MODEL_REQUESTS = False
 
 
 @pytest.fixture
