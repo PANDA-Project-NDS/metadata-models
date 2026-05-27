@@ -1,0 +1,3 @@
+[submodule "journal-samples"]
+	path = journal-samples
+	url = git@github.com:PANDA-Project-NDS/publisher-journal-samples.git
