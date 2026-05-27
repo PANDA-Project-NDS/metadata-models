@@ -157,7 +157,7 @@ async def test_search_respects_max_calls(
     assert tool_calls >= 1, "Agent did not call Journal Search tool"
 
     with subtests.test("search within limit"):
-        assert tool_calls <= 3
+        assert tool_calls <= 5
 
     with subtests.test("no hallucination"):
         assert is_empty(result.output.issn)

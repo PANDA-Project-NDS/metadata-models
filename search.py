@@ -96,7 +96,7 @@ def retrieve_for_pass(
     )
 
 
-def build_retriever(index: BaseIndex, journal_id: str, top_k: int = 3) -> BaseRetriever:
+def build_retriever(index: BaseIndex, journal_id: str, top_k: int = 2) -> BaseRetriever:
     """Build a LlamaIndex retriever scoped to journal_id using MetadataFilters."""
     filters = MetadataFilters(
         filters=[ExactMatchFilter(key="journal_id", value=journal_id)]
@@ -118,7 +118,7 @@ async def journal_search(ctx: RunContext[JournalSourcesDeps], query: str) -> str
     logger.info(
         f"Agent invoked journal_search with query: '{query}' for journal_id: '{journal_id}'"
     )
-    if ctx.usage.tool_calls >= 2:
+    if ctx.usage.tool_calls >= 5:
         return "Number of allowed searches exceeded. Please form the output."
     try:
         results = build_retriever(index, journal_id).retrieve(query)

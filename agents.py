@@ -137,7 +137,7 @@ journal_search_tool = Tool(
     name="Journal Search",
     description="Search for additional context, scoped to this journal only.",
     max_retries=1,
-    sequential=True,
+    sequential=False,
 )
 
 
