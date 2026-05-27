@@ -236,6 +236,13 @@ class Editor(SourcedModel):
         description="List of institutional affiliations. Institute names, not locations.",
     )
 
+    @field_validator("affiliations", mode="before")
+    @classmethod
+    def coerce_to_list(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
+
 
 class PublisherPolicies(BaseModel):
     """Publisher-specific metadata and policy statements."""
