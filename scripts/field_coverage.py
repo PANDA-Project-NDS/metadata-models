@@ -25,8 +25,8 @@ def is_filled(value) -> bool:
 
 
 def _is_sourced_value(obj: dict) -> bool:
-    """A SourcedValue has exactly two keys: 'value' and 'evidence'."""
-    return set(obj.keys()) == {"value", "evidence"}
+    """A SourcedValue has 'value' key and at most 2 keys total."""
+    return isinstance(obj, dict) and "value" in obj and len(obj) <= 2
 
 
 def flatten_doc(doc: dict, prefix: str = "") -> dict[str, bool]:

@@ -10,6 +10,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from models.journal import (
+    INCLUDE_EVIDENCE,
     BasicInfoExtraction,
     EditorialExtraction,
     FeesExtraction,
@@ -59,6 +60,7 @@ EVIDENCE_RULES = """
    - PRECISION: If a value is "approximately" or "about" a certain amount, extract the number and note the approximation in the quote.
 """
 
+
 PASSES: list[PassConfig] = [
     PassConfig(
         "Info Agent",
@@ -86,7 +88,7 @@ PASSES: list[PassConfig] = [
         [
             "Article Processing Charge, APC, publication fees, cost, waivers, discounts, society membership, institutional membership",
         ],
-        domain_guidelines=MONETARY_RULES + EVIDENCE_RULES,
+        domain_guidelines=MONETARY_RULES + (EVIDENCE_RULES if INCLUDE_EVIDENCE else ""),
     ),
     PassConfig(
         "Editors Agent",
@@ -99,18 +101,21 @@ PASSES: list[PassConfig] = [
 
 # --- Prompts & Agents ---
 SEARCH_RULES = """
-5. SEARCH FIRST: Before outputting null or an empty list for any field, you MUST call the `Journal Search` tool to look for additional context. Never give up on a field without searching. Retry search with rephrased query if first search returns not enough context.
-6. SEARCH QUERIES: When calling `Journal Search`, craft a specific query targeting the exact piece of information you're missing (e.g., "ISSN", "APC fee", "editorial board").
-7. RE-ANALYZE: After receiving search results, combine them with the original context and extract all available information.
+- SEARCH FIRST: Before outputting null or an empty list for any field, you MUST call the `Journal Search` tool to look for additional context. Never give up on a field without searching. Retry search with rephrased query if first search returns not enough context.
+- SEARCH QUERIES: When calling `Journal Search`, craft a specific query targeting the exact piece of information you're missing (e.g., "ISSN", "APC fee", "editorial board").
+- RE-ANALYZE: After receiving search results, combine them with the original context and extract all available information.
 """
+
+EVIDENCE_INSTRUCTIONS = (
+    "- VERBATIM EVIDENCE: For every extracted value, you must provide the exact, verbatim quote from the text in the `quote` field.\n"
+    "- SOURCE TRACKING: The context will be provided in blocks separated by \"--- [Source: <filename>] ---\". You MUST copy the exact <filename> into the `source` field for your evidence.\n"
+)
 
 SYSTEM_PROMPT = """You are an expert data extraction assistant. Your task is to extract highly accurate, structured metadata for an academic journal based ONLY on the provided context chunks.
 
 ## CRITICAL RULES
-1. NO HALLUCINATION: If a piece of information is not explicitly stated, you MUST output null or an empty list. Do not guess or infer.
-2. VERBATIM EVIDENCE: For every extracted value, you must provide the exact, verbatim quote from the text in the `quote` field.
-3. SOURCE TRACKING: The context will be provided in blocks separated by "--- [Source: <filename>] ---". You MUST copy the exact <filename> into the `source` field for your evidence.
-4. OUTPUT TOOL: You MUST use the `final_result` tool to submit your extraction. Do not output JSON as text, do not include explanations or reasoning outside the tool call. Call `final_result` with the structured data directly.
+- NO HALLUCINATION: If a piece of information is not explicitly stated, you MUST output null or an empty list. Do not guess or infer.
+{evidence_instructions}4. OUTPUT TOOL: You MUST use the `final_result` tool to submit your extraction. Do not output JSON as text, do not include explanations or reasoning outside the tool call. Call `final_result` with the structured data directly.
 {search_rules}{domain_guidelines}
 Focus only on the fields present in the output schema."""
 
@@ -147,6 +152,7 @@ def make_agent(
     include_search: bool = True,
 ) -> Agent[object, str]:
     prompt = SYSTEM_PROMPT.format(
+        evidence_instructions=EVIDENCE_INSTRUCTIONS if INCLUDE_EVIDENCE else "",
         search_rules=SEARCH_RULES if include_search else "",
         domain_guidelines=pass_config.domain_guidelines,
     )

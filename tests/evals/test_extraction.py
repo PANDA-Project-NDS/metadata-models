@@ -2,6 +2,7 @@ import pytest
 from fixtures.journal_docs import make_node
 
 from agents import PASSES, make_agent
+from models.journal import INCLUDE_EVIDENCE
 from search import JournalSourcesDeps
 from tests.evals.fixtures import (
     APC_CURRENCY_MIXED_CONTEXT,
@@ -48,6 +49,7 @@ async def test_extract_print_issn(eval_model, mock_index, mock_retriever):
     assert output.issn.print.value == "1234-5678"
 
 
+@pytest.mark.skipif(not INCLUDE_EVIDENCE, reason="requires WITH_EVIDENCE=true")
 async def test_extract_issn_evidence(eval_model, mock_index, mock_retriever):
     """Info Agent provides verbatim quote and source for extracted ISSN."""
     nodes = [
@@ -93,6 +95,7 @@ async def test_extract_single_apc(eval_model, mock_index, mock_retriever):
     assert output.pricing.article_processing_charges[0].fee.currency == "USD"
 
 
+@pytest.mark.skipif(not INCLUDE_EVIDENCE, reason="requires WITH_EVIDENCE=true")
 async def test_extract_apc_evidence(eval_model, mock_index, mock_retriever):
     """Fees Agent provides verbatim quote and source for extracted APC."""
     nodes = [make_node(APC_SINGLE_CONTEXT, node_id="apc-1", source_uri="fees.html")]
