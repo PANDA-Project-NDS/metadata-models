@@ -1,5 +1,6 @@
+import os
 import re
-from typing import List, Optional, TypeVar, Generic, Literal
+from typing import List, Optional, TypeVar, Generic, Literal, TYPE_CHECKING
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
@@ -22,6 +23,15 @@ except ImportError:
 
 T = TypeVar("T")
 
+if TYPE_CHECKING:
+    INCLUDE_EVIDENCE = True
+else:
+    INCLUDE_EVIDENCE = os.environ.get("WITH_EVIDENCE", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
 
 class Evidence(BaseModel):
     """Container for evidence supporting an extracted value."""
@@ -33,20 +43,44 @@ class Evidence(BaseModel):
     source: str = Field(description="Source identifier (file name, URL, or URI).")
 
 
-class SourcedModel(BaseModel):
+# --- Clean variants (no evidence) ---
+
+
+class CleanSourcedModel(BaseModel):
     """Provide combined evidence for multiple values of a sub-object."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class CleanSourcedValue(CleanSourcedModel, Generic[T]):
+    """A value paired with its supporting evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+    value: T
+
+
+# --- Evidence-enabled variants ---
+
+
+class EvidenceSourcedModel(CleanSourcedModel):
+    """Provide combined evidence for multiple values of a sub-object."""
+
     evidence: Optional[Evidence] = Field(
         default=None, description="Evidence supporting this specific value."
     )
 
 
-class SourcedValue(SourcedModel, Generic[T]):
+class EvidenceSourcedValue(CleanSourcedValue, Generic[T]):
     """A value paired with its supporting evidence."""
 
-    model_config = ConfigDict(extra="forbid")
-    value: T
+    evidence: Optional[Evidence] = Field(
+        default=None, description="Evidence supporting this specific value."
+    )
+
+
+# --- Module-level alias ---
+SourcedModel = EvidenceSourcedModel if INCLUDE_EVIDENCE else CleanSourcedModel
+SourcedValue = EvidenceSourcedValue if INCLUDE_EVIDENCE else CleanSourcedValue
 
 
 class PublicationFrequency(SourcedModel):

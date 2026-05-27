@@ -1,4 +1,7 @@
-import json, sys, copy, os
+import json
+import sys
+import copy
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from journal import JournalMetadata
 
