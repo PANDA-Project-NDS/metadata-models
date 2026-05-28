@@ -2,7 +2,7 @@ import os
 import re
 from typing import List, Optional, TypeVar, Generic, Literal, TYPE_CHECKING
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 try:
     from .vocab import (
@@ -193,7 +193,7 @@ class ISSN(BaseModel):
         default=None, description="Linking ISSN (ISSN-L) in NNNN-NNNN form."
     )
 
-    @field_validator("print", "online")
+    @field_validator("print", "online", "linking")
     @classmethod
     def validate_issn_format(
         cls, v: Optional[SourcedValue[str]]
@@ -245,6 +245,16 @@ class Discount(SourcedModel):
         default=None, description="Criteria for discount eligibility as stated (quote)."
     )
 
+    @model_validator(mode="after")
+    def validate_discount_fields(self) -> "Discount":
+        if self.type == "fixed" and self.amount is None:
+            raise ValueError("'fixed' discount requires 'amount'")
+        if self.type == "percent" and self.percentage is None:
+            raise ValueError("'percent' discount requires 'percentage'")
+        if self.type == "waiver" and self.amount is not None and self.percentage is not None:
+            raise ValueError("'waiver' discount should not have 'amount' or 'percentage'")
+        return self
+
 
 class ArticleType(SourcedModel):
     """Definition of an article type supported by the journal."""
@@ -273,6 +283,8 @@ class Editor(SourcedModel):
     @field_validator("affiliations", mode="before")
     @classmethod
     def coerce_to_list(cls, v):
+        if v is None or v == "":
+            return []
         if isinstance(v, str):
             return [v]
         return v
@@ -324,6 +336,15 @@ class Facts(BaseModel):
     indexed_in: List[IndexingService] = Field(
         default_factory=list, description="Indexing services."
     )
+
+    @field_validator("indexed_in", mode="before")
+    @classmethod
+    def coerce_to_list(cls, v):
+        if v is None or v == "":
+            return []
+        if isinstance(v, str):
+            return [v]
+        return v
 
 
 # --- Modular Domain Blocks ---
