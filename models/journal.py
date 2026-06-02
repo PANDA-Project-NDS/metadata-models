@@ -333,18 +333,9 @@ class Facts(BaseModel):
     abbreviation: Optional[SourcedValue[str]] = Field(
         default=None, description="Journal abbreviation."
     )
-    indexed_in: List[IndexingService] = Field(
-        default_factory=list, description="Indexing services."
+    indexed_in: Optional[SourcedValue[List[IndexingService]]] = Field(
+        default=None, description="Indexing services."
     )
-
-    @field_validator("indexed_in", mode="before")
-    @classmethod
-    def coerce_to_list(cls, v):
-        if v is None or v == "":
-            return []
-        if isinstance(v, str):
-            return [v]
-        return v
 
 
 # --- Modular Domain Blocks ---
