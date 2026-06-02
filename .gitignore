@@ -8,3 +8,8 @@ __pycache__/
 .python-version
 uv.lock
 prompt.md
+
+*.csv
+*.ods
+*.html
+*.json
