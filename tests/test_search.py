@@ -38,12 +38,11 @@ def test_format_nodes_includes_sources(sample_nodes):
 
 
 def test_node_ids_returns_ids(sample_nodes):
-    """node_ids() returns a set of all node IDs currently stored in context_nodes."""
+    """seen_node_ids returns a set of all node IDs currently stored in context_nodes."""
     deps = JournalSourcesDeps(
         index=MagicMock(), journal_id="test-journal", context_nodes=sample_nodes
     )
-    ids = deps.node_ids()
-    assert ids == {"node-1", "node-2", "node-3"}
+    assert deps.seen_node_ids == {"node-1", "node-2", "node-3"}
 
 
 def test_extend_nodes_deduplicates(sample_nodes):
@@ -55,7 +54,7 @@ def test_extend_nodes_deduplicates(sample_nodes):
     added = deps.extend_nodes(sample_nodes[:2])
     assert len(added) == 1
     assert "node-2" in deps.seen_node_ids
-    assert deps.node_ids() == {"node-1", "node-2"}
+    assert deps.seen_node_ids == {"node-1", "node-2"}
 
 
 def test_extend_nodes_returns_new_only(sample_nodes):
@@ -123,7 +122,7 @@ async def test_journal_search_tool_no_results(mock_retriever, mock_index):
 
 @pytest.mark.asyncio
 async def test_journal_search_tool_max_calls(mock_retriever, mock_index):
-    """When usage.tool_calls >= 3, the tool refuses further searches and returns an 'exceeded' message."""
+    """When usage.tool_calls >= 5, the tool refuses further searches and returns an 'exceeded' message."""
     nodes = [make_node("some result", node_id="n1")]
     retriever = mock_retriever({"anything": nodes})
     idx = mock_index(retriever)
@@ -132,7 +131,7 @@ async def test_journal_search_tool_max_calls(mock_retriever, mock_index):
     ctx = MagicMock(spec=RunContext)
     ctx.deps = deps
     ctx.usage = MagicMock()
-    ctx.usage.tool_calls = 3
+    ctx.usage.tool_calls = 5
 
     result = await journal_search(ctx, "anything")
     assert "exceeded" in result
