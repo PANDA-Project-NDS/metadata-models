@@ -1,36 +1,13 @@
-# Stage 1 — Evidence Types
+from dataclasses import dataclass
 
-**Goal**: Add the evidence collection types for the golden pipeline.
-
-**Depends on**: Stage 0
-
-## Files to Create/Modify
-
-| File | Action |
-|---|---|
-| `golden/__init__.py` | **Create** — empty |
-| `golden/models.py` | **Create** — `MapResult`, `CollectedEvidence`, `FieldError`, `VerificationResult` |
-| `golden/structural_parser.py` | **Create** — move from `scripts/editor_parser.py`, remove `sys.path.insert` hack |
-
-## `golden/__init__.py`
-
-Empty file to make `golden` a package.
-
-## `golden/structural_parser.py`
-
-Copy of `scripts/editor_parser.py` with two changes:
-1. Remove `import sys` and `sys.path.insert(0, ...)` (line 12-15) — no longer needed in workspace package
-2. Keep `from models.journal import Editor` — resolves via workspace dependency
-
-## `golden/models.py`
-
-```python
 from pydantic import BaseModel, Field
 
-class MapResult(BaseModel):
-    """Pydantic-ai requires a single BaseModel output_type, not list[T]."""
-    evidence: list[CollectedEvidence]
 
+@dataclass(frozen=True)
+class JournalIdentity:
+    """Unique identifier for a journal sample."""
+    publisher: str
+    journal: str
 
 class CollectedEvidence(BaseModel):
     """Single piece of evidence collected from source text."""
@@ -46,6 +23,11 @@ class CollectedEvidence(BaseModel):
     note: str = Field(
         description="Brief explanation of relevance, e.g. 'print ISSN on masthead'"
     )
+
+
+class MapResult(BaseModel):
+    """Map phase wrapper of evidence list."""
+    evidence: list[CollectedEvidence]
 
 
 class FieldError(BaseModel):
@@ -71,10 +53,3 @@ class VerificationResult(BaseModel):
         default_factory=list,
         description="Fields that failed verification. Empty if is_correct is True."
     )
-```
-
-## Acceptance Criteria
-
-- `from golden.models import MapResult, CollectedEvidence, FieldError, VerificationResult` works
-- `JournalSourcesDeps(index=..., journal_id="test")` requires index (already the case)
-- All existing tests still pass

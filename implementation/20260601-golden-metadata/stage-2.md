@@ -402,7 +402,7 @@ async def run_extraction_pipeline(
 ```python
 def try_parse_editors(journal_dir: Path) -> list[Editor] | None:
     """Try structural parser on editors files. Returns None if no editors file or parser fails."""
-    from golden.parser import parse_editors
+     from golden.structural_parser import parse_editors
 
     for fname in ("editors.md", "editorial_board.md", "editorial-board.md", "editorial_team.md"):
         fpath = journal_dir / fname
