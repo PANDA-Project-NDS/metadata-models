@@ -9,8 +9,21 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 load_dotenv()
 
-logfire.configure(send_to_logfire="if-token-present")
-logfire.instrument_pydantic_ai()
+_langfuse_available = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
+
+if _langfuse_available:
+    from langfuse import get_client
+    from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
+    from pydantic_ai.agent import Agent
+
+    langfuse = get_client()
+    LlamaIndexInstrumentor().instrument()
+    Agent.instrument_all()
+else:
+    import logfire
+    logfire.configure(send_to_logfire="if-token-present")
+    logfire.instrument_pydantic_ai()
+    langfuse = None
 
 llm_model = OpenAIChatModel(
     os.getenv("OPENAI_MODEL", ""),

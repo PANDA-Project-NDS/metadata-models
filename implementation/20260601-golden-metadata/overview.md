@@ -41,6 +41,7 @@ Merge per-field verdicts → write golden JSON + grading sidecar
 | 2 — Golden Pipeline Agents | [stage-2.md](stage-2.md) | TODO |
 | 3 — Generation Entry Point | [stage-3.md](stage-3.md) | TODO |
 | 4 — Two-Judge Evaluation | [stage-4.md](stage-4.md) | TODO |
+| 5 — Langfuse Tracing | [stage-5.md](stage-5.md) | Planned |
 
 ## Observability
 - [observability.md](observability.md) — Hybrid logging (Logfire) and tracing (Langfuse) strategy.

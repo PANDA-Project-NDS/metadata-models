@@ -4,10 +4,12 @@ import json
 import logging
 import os
 import argparse
+import contextlib
 from pathlib import Path
 from typing import Generator
 
 from dotenv import load_dotenv
+from agents.base import langfuse, _langfuse_available
 from llama_index.core import Settings
 from llama_index.core.embeddings import resolve_embed_model as get_embed_model
 from llama_index.core import VectorStoreIndex
@@ -151,44 +153,63 @@ async def main():
             stats["skip"] += 1
             continue
 
-        journal_dir = SAMPLES_ROOT / publisher / "extracted" / journal
+        if _langfuse_available:
+            from langfuse import propagate_attributes
 
-        # Chunk files and build index once — shared across all passes
-        chunks_gen = chunk_files(journal_dir)
-        # Convert to list here because chunks are used multiple times across passes
-        chunks = list(chunks_gen)
-        if not chunks:
-            logger.warning(f"No content for {publisher}/{journal}")
-            stats["fail"] += 1
-            continue
-        journal_id = f"{publisher}/{journal}"
-        logger.info(f"Processing {journal_id} ({len(chunks)} chunks) ...")
+            trace_ctx = langfuse.start_as_current_observation(
+                as_type="trace",
+                name=f"Journal Extraction: {publisher}/{journal}",
+            )
+            attr_ctx = propagate_attributes(
+                metadata={"publisher": publisher, "journal": journal},
+                tags=["golden-metadata", publisher],
+            )
+        else:
+            trace_ctx = contextlib.nullcontext()
+            attr_ctx = contextlib.nullcontext()
 
-        # Build index in thread to avoid blocking the event loop during embedding
-        index = await asyncio.to_thread(build_index_from_chunks, chunks)
+        with trace_ctx, attr_ctx:
+            journal_dir = SAMPLES_ROOT / publisher / "extracted" / journal
 
-        # Phase 1: Map-Reduce Extraction (4 passes, concurrent within journal)
-        pass_results = await asyncio.gather(*[
-            run_extraction_pipeline(pc, journal_id, journal_dir, index, chunks)
-            for pc in PASSES
-        ])
+            # Chunk files and build index once — shared across all passes
+            chunks_gen = chunk_files(journal_dir)
+            # Convert to list here because chunks are used multiple times across passes
+            chunks = list(chunks_gen)
+            if not chunks:
+                logger.warning(f"No content for {publisher}/{journal}")
+                stats["fail"] += 1
+                continue
+            journal_id = f"{publisher}/{journal}"
+            logger.info(f"Processing {journal_id} ({len(chunks)} chunks) ...")
 
-        # Merge pass results into JournalMetadata
-        merged = {}
-        for result, _ in pass_results:
-            merged.update(result.model_dump(mode="json"))
-        metadata = JournalMetadata.model_validate(merged)
-        metadata.journal_id = journal_id
+            # Build index in thread to avoid blocking the event loop during embedding
+            index = await asyncio.to_thread(build_index_from_chunks, chunks)
 
-        # Phase 2: Two-Judge Evaluation (coverage + evidence)
-        coverage_text = coverage_sections.get(publisher, "")
-        grading = await judge_journal(metadata, publisher, coverage_text)
+            # Phase 1: Map-Reduce Extraction (4 passes, concurrent within journal)
+            pass_results = await asyncio.gather(*[
+                run_extraction_pipeline(pc, journal_id, journal_dir, index, chunks)
+                for pc in PASSES
+            ])
 
-        # Write
-        if not args.dry_run:
-            write_outputs(publisher, journal, metadata, grading)
-        stats["ok"] += 1
-        logger.info(f"Done {journal_id}. OK: {stats['ok']}, Failed: {stats['fail']}, Skipped: {stats['skip']}")
+            # Merge pass results into JournalMetadata
+            merged = {}
+            for result, _ in pass_results:
+                merged.update(result.model_dump(mode="json"))
+            metadata = JournalMetadata.model_validate(merged)
+            metadata.journal_id = journal_id
+
+            # Phase 2: Two-Judge Evaluation (coverage + evidence)
+            coverage_text = coverage_sections.get(publisher, "")
+            grading = await judge_journal(metadata, publisher, coverage_text)
+
+            # Write
+            if not args.dry_run:
+                write_outputs(publisher, journal, metadata, grading)
+            stats["ok"] += 1
+            logger.info(f"Done {journal_id}. OK: {stats['ok']}, Failed: {stats['fail']}, Skipped: {stats['skip']}")
+
+    if _langfuse_available:
+        langfuse.flush()
 
     logger.info(f"Finished. OK: {stats['ok']}, Failed: {stats['fail']}, Skipped: {stats['skip']}")
 

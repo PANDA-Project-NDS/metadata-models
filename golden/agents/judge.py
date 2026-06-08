@@ -115,6 +115,7 @@ def make_coverage_judge() -> Agent[None, CoverageJudgeResult]:
         model=judge_model,
         output_type=CoverageJudgeResult,
         system_prompt=COVERAGE_JUDGE_PROMPT,
+        instrument=True,
     )
 
 
@@ -124,6 +125,7 @@ def make_evidence_judge() -> Agent[None, EvidenceJudgeResult]:
         model=judge_model,
         output_type=EvidenceJudgeResult,
         system_prompt=EVIDENCE_JUDGE_PROMPT,
+        instrument=True,
     )
 
 

@@ -48,6 +48,7 @@ def make_map_agent(pass_config: PassConfig) -> Agent[None, MapResult]:
         system_prompt=MAP_PROMPT.format(
             schema=json.dumps(pass_config.output_type.model_json_schema(), indent=2),
         ) + pass_config.domain_guidelines,
+        instrument=True,
     )
 
 
@@ -72,6 +73,7 @@ def make_reduce_agent(pass_config: PassConfig) -> Agent:
         model=reduce_model,
         output_type=pass_config.output_type,
         system_prompt=REDUCE_PROMPT + pass_config.domain_guidelines,
+        instrument=True,
     )
 
 
@@ -98,6 +100,7 @@ def make_completeness_agent(pass_config: PassConfig) -> Agent:
         instructions=context_instructions,
         deps_type=JournalSourcesDeps,
         tools=[journal_search_tool],
+        instrument=True,
     )
 
 
@@ -119,6 +122,7 @@ def make_verification_agent() -> Agent[None, VerificationResult]:
         model=verification_model,
         output_type=VerificationResult,
         system_prompt=VERIFICATION_PROMPT,
+        instrument=True,
     )
 
 
@@ -143,5 +147,6 @@ def make_correction_agent(pass_config: PassConfig) -> Agent:
         instructions=context_instructions,
         deps_type=JournalSourcesDeps,
         tools=[journal_search_tool],
+        instrument=True,
     )
 
