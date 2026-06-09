@@ -1,8 +1,8 @@
 from typing import Literal
 
-ReviewType = Literal["single-blind", "double-blind", "open-review"]
-SupportedCurrency = Literal["USD", "EUR"]
-Frequency = Literal[
+type ReviewType = Literal["single-blind", "double-blind", "open-review"]
+type SupportedCurrency = Literal["USD", "EUR"]
+type Frequency = Literal[
     "Annually",
     "Semiannually",
     "Quarterly",
@@ -16,7 +16,7 @@ Frequency = Literal[
 # COARS Resource Type leaf nodes under "text" (c_18cf)
 # Source: example_schema/resource_types_for_dspace_en.xml
 # Regenerate with: python scripts/extract_coars.py
-ArticleTypeValue = Literal[
+type ArticleTypeValue = Literal[
     "annotation",
     "bachelor thesis",
     "bibliography",
@@ -61,7 +61,7 @@ ArticleTypeValue = Literal[
     "transcription",
     "working paper",
 ]
-IndexingService = Literal[
+type IndexingService = Literal[
     "Scopus",
     "Web of Science",
     "Google Scholar",
@@ -78,3 +78,5 @@ IndexingService = Literal[
     "OpenAlex",
     "CrossRef",
 ]
+type MembershipType = Literal["society", "institutional", "individual", "corporate"]
+type DiscountType = Literal["waiver", "fixed", "percent"]

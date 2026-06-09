@@ -1,6 +1,6 @@
 import os
 import re
-from typing import List, Optional, TypeVar, Generic, Literal, TYPE_CHECKING
+from typing import List, Optional, TypeVar, Generic, TYPE_CHECKING
 from dotenv import load_dotenv
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
@@ -12,6 +12,8 @@ try:
         ArticleTypeValue,
         SupportedCurrency,
         IndexingService,
+        MembershipType,
+        DiscountType,
     )
 except ImportError:
     from vocab import (
@@ -20,6 +22,8 @@ except ImportError:
         ArticleTypeValue,
         SupportedCurrency,
         IndexingService,
+        MembershipType,
+        DiscountType,
     )
 
 T = TypeVar("T")
@@ -117,9 +121,7 @@ class Membership(BaseModel):
     """Information about society or institutional membership models."""
 
     model_config = ConfigDict(extra="forbid")
-    type: Optional[
-        SourcedValue[Literal["society", "institutional", "individual", "corporate"]]
-    ] = Field(
+    type: Optional[SourcedValue[MembershipType]] = Field(
         default=None, description="Membership type (e.g., 'society', 'institutional')."
     )
     details: Optional[SourcedValue[str]] = Field(
@@ -235,7 +237,7 @@ class Discount(SourcedModel):
     """Information about waivers or discounts available for publication fees."""
 
     model_config = ConfigDict(extra="forbid")
-    type: Literal["waiver", "fixed", "percent"] = Field(
+    type: DiscountType = Field(
         ..., description="Discount type label."
     )
     amount: Optional[MonetaryAmount] = Field(
