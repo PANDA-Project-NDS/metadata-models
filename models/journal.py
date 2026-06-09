@@ -1,6 +1,7 @@
 import os
 import re
 from typing import List, Optional, TypeVar, Generic, Literal, TYPE_CHECKING
+from dotenv import load_dotenv
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
@@ -22,6 +23,8 @@ except ImportError:
     )
 
 T = TypeVar("T")
+
+load_dotenv()
 
 if TYPE_CHECKING:
     INCLUDE_EVIDENCE = True
