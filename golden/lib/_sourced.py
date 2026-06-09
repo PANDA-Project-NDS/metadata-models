@@ -14,6 +14,8 @@ def issubclass_safe(cls, base) -> bool:
 def _is_sourced_value(annotation: type) -> bool:
     origin = get_origin(annotation)
     if origin is not None:
+        if issubclass_safe(origin, SourcedValue):
+            return True
         for arg in get_args(annotation):
             if _is_sourced_value(arg):
                 return True
@@ -24,6 +26,8 @@ def _is_sourced_value(annotation: type) -> bool:
 def _is_sourced_model(annotation: type) -> bool:
     origin = get_origin(annotation)
     if origin is not None:
+        if issubclass_safe(origin, SourcedModel):
+            return True
         for arg in get_args(annotation):
             if _is_sourced_model(arg):
                 return True

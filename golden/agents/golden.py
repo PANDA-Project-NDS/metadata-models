@@ -5,6 +5,7 @@ from pydantic_ai import Agent
 from agents.base import get_model
 from agents.config import PassConfig
 from agents.factory import context_instructions, journal_search_tool
+from golden.lib.flatten import get_slimmer_schema
 from golden.models import (
     MapResult,
     VerificationResult,
@@ -24,19 +25,19 @@ correction_model = get_model("correction")
 
 MAP_PROMPT = """You are an evidence collector for journal metadata extraction.
 
-## TARGET SCHEMA
-The following JSON schema defines the fields you need to find evidence for. Collect evidence for every field that has information in the source text.
+## TARGET FIELDS
+The following list defines the fields you need to find evidence for. Collect evidence for every field that has information in the source text.
 {schema}
 
 ## RULES
 - Output a MapResult containing a list of CollectedEvidence via final_result
-- Each item needs: field_hint (exact schema field path), quote (verbatim text), source (filename), note (brief relevance)
+- Each item needs: field_hint (exact field path), quote (verbatim text), source (filename), note (brief relevance)
 - The source filename is in the "[Source: filename]" marker at the top of the input
-- field_hint must match a field path from the target schema above, e.g. "issn.print", "pricing.article_processing_charges[0].fee.value"
+- field_hint must match a field path from the target fields above, e.g. "issn.print", "pricing.article_processing_charges.fee.value"
 - Quotes must be EXACT, verbatim text from the page
 - Do not paraphrase or summarize in quotes
-- Only collect evidence for fields that exist in your target schema above. If the chunk contains information for fields NOT in your target schema, ignore it.
-- If nothing relevant to your target schema, return MapResult with an empty evidence list
+- Only collect evidence for fields that exist in your target fields above. If the chunk contains information for fields NOT in your target fields, ignore it.
+- If nothing relevant to your target fields, return MapResult with an empty evidence list
 """
 
 
@@ -46,9 +47,9 @@ def make_map_agent(pass_config: PassConfig) -> Agent[None, MapResult]:
         model=map_model,
         output_type=MapResult,
         system_prompt=MAP_PROMPT.format(
-            schema=json.dumps(pass_config.output_type.model_json_schema(), indent=2),
-        ) + pass_config.domain_guidelines,
-        instrument=True,
+            schema=get_slimmer_schema(pass_config.output_type),
+        ),
+        output_retries=2,
     )
 
 
@@ -73,7 +74,6 @@ def make_reduce_agent(pass_config: PassConfig) -> Agent:
         model=reduce_model,
         output_type=pass_config.output_type,
         system_prompt=REDUCE_PROMPT + pass_config.domain_guidelines,
-        instrument=True,
     )
 
 
@@ -100,7 +100,6 @@ def make_completeness_agent(pass_config: PassConfig) -> Agent:
         instructions=context_instructions,
         deps_type=JournalSourcesDeps,
         tools=[journal_search_tool],
-        instrument=True,
     )
 
 
@@ -122,7 +121,6 @@ def make_verification_agent() -> Agent[None, VerificationResult]:
         model=verification_model,
         output_type=VerificationResult,
         system_prompt=VERIFICATION_PROMPT,
-        instrument=True,
     )
 
 
@@ -147,6 +145,5 @@ def make_correction_agent(pass_config: PassConfig) -> Agent:
         instructions=context_instructions,
         deps_type=JournalSourcesDeps,
         tools=[journal_search_tool],
-        instrument=True,
     )
 
