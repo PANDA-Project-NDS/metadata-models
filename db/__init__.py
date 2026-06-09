@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from pymongo import MongoClient
 
 from .embed import get_embed_model
+from .indexer import make_sentence_splitter
 from .indexer import Indexer
 from .metadata import MetadataStore
 from .documents import DocumentStore
@@ -25,4 +26,5 @@ __all__ = [
     "MetadataStore",
     "Indexer",
     "get_embed_model",
+    "make_sentence_splitter",
 ]

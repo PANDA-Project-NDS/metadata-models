@@ -5,6 +5,9 @@ import os
 import tqdm
 from llama_index.core import VectorStoreIndex
 from llama_index.vector_stores.mongodb import MongoDBAtlasVectorSearch
+from llama_index.core.ingestion import IngestionPipeline
+from llama_index.core.node_parser import SentenceSplitter
+from transformers import AutoTokenizer
 
 from .embed import get_embed_model
 from .documents import DocumentStore
@@ -12,24 +15,24 @@ from .documents import DocumentStore
 logger = logging.getLogger(__name__)
 
 
-def _make_ingestion_pipeline(vector_store: MongoDBAtlasVectorSearch):
-    """Create an IngestionPipeline with chunking and embedding transformations."""
-    from llama_index.core.ingestion import IngestionPipeline
-    from llama_index.core.node_parser import SentenceSplitter
-    from transformers import AutoTokenizer
-
-    # set tokenizer to get better approximation of token counts for chunking, based on the embedding model
+def make_sentence_splitter():
+    """Create a SentenceSplitter tuned for the configured embedding model."""
     embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
     tokenizer = AutoTokenizer.from_pretrained(embed_model_name)
+    tokenizer.model_max_length = float('inf')
+    return SentenceSplitter(
+        # lower chunk_size to account for metadata
+        chunk_size=450,
+        chunk_overlap=50,
+        tokenizer=tokenizer.encode,
+    )
 
+
+def _make_ingestion_pipeline(vector_store: MongoDBAtlasVectorSearch) -> IngestionPipeline:
+    """Create an IngestionPipeline with chunking and embedding transformations."""
     return IngestionPipeline(
         transformations=[
-            SentenceSplitter(
-                # lower chunk_size to account for metadata
-                chunk_size=450,
-                chunk_overlap=50,
-                tokenizer=tokenizer.encode,
-            ),
+            make_sentence_splitter(),
             get_embed_model(),
         ],
         vector_store=vector_store,

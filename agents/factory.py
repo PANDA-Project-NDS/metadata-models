@@ -1,6 +1,6 @@
 from pydantic_ai import Agent, RunContext, Tool
 
-from agents.base import llm_model
+from agents.base import get_model
 from agents.config import PassConfig
 from agents.prompts import EVIDENCE_INSTRUCTIONS, SEARCH_RULES, SYSTEM_PROMPT
 from models.journal import INCLUDE_EVIDENCE
@@ -32,7 +32,7 @@ def make_agent(
     )
     return Agent(
         name=pass_config.name,
-        model=llm_model,
+        model=get_model(),
         output_type=pass_config.output_type,
         system_prompt=prompt,
         instructions=context_instructions,

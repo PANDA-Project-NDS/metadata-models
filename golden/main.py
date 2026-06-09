@@ -11,9 +11,8 @@ from typing import Generator
 from dotenv import load_dotenv
 from agents.base import langfuse, _langfuse_available
 from llama_index.core import Settings
-from llama_index.core.embeddings import resolve_embed_model as get_embed_model
+from db import get_embed_model, make_sentence_splitter
 from llama_index.core import VectorStoreIndex
-from llama_index.core.schema import TextNode
 
 from agents import PASSES
 from golden.models import JournalIdentity
@@ -82,15 +81,23 @@ def build_index_from_chunks(
 ) -> VectorStoreIndex:
     """Build per-journal VectorStoreIndex from chunks.
 
-    Passes chunk.header_path as metadata for structural context in search results.
+    Uses make_node_parser() from db/indexer.py to split chunks into
+    embedding-sized pieces (450 tokens). Passes chunk.header_path as
+    metadata for structural context in search results.
     """
-    nodes = [
-        TextNode(
-            text=c.text,
-            metadata={"source_uri": c.filename, "header_path": c.header_path},
-        )
+    from llama_index.core import Document
+
+    splitter = make_sentence_splitter()
+
+    documents = [
+        Document(text=c.text, metadata={"source_uri": c.filename, "header_path": c.header_path})
         for c in chunks
     ]
+
+    nodes = []
+    for doc in documents:
+        nodes.extend(splitter.get_nodes_from_documents([doc]))
+
     return VectorStoreIndex(nodes=nodes)
 
 
@@ -133,8 +140,6 @@ async def main():
 
     Settings.embed_model = get_embed_model()
     Settings.llm = None
-    # Eagerly initialize embedding model to avoid blocking first journal
-    Settings.embed_model._model  # noqa: B018
 
     # Load coverage.md sections once, cached by publisher name
     coverage_sections = load_coverage_sections()

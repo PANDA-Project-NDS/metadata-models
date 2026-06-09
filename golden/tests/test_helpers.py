@@ -1,10 +1,9 @@
-from pathlib import Path
 from unittest.mock import patch
 
 import golden.agents.judge as judge
 import golden.main as main
 from golden.agents.judge import load_coverage_sections
-from golden.main import discover_journals, JournalIdentity
+from golden.main import discover_journals
 
 
 # --- 5b. Coverage Parsing (load_coverage_sections) ---
