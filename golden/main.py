@@ -128,6 +128,8 @@ async def main():
     parser.add_argument("--limit", type=int, default=None,
                         help="Cap number of journals processed (for incremental runs).")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--map-parallel", type=int, default=4,
+                        help="Max concurrent map-phase LLM calls (default: 4).")
     args = parser.parse_args()
 
     load_dotenv()
@@ -150,6 +152,7 @@ async def main():
         journals = itertools.islice(journals, args.limit)
 
     stats = {"ok": 0, "fail": 0, "skip": 0}
+    sem = asyncio.Semaphore(args.map_parallel)
 
     for identity in journals:
         publisher, journal = identity.publisher, identity.journal
@@ -190,11 +193,12 @@ async def main():
             # Build index in thread to avoid blocking the event loop during embedding
             index = await asyncio.to_thread(build_index_from_chunks, chunks)
 
-            # Phase 1: Map-Reduce Extraction (4 passes, concurrent within journal)
-            pass_results = await asyncio.gather(*[
-                run_extraction_pipeline(pc, journal_id, journal_dir, index, chunks)
-                for pc in PASSES
-            ])
+            # Phase 1: Map-Reduce Extraction (semaphore-gated, concurrent within journal)
+            async def _run_pass(pc):
+                async with sem:
+                    return await run_extraction_pipeline(pc, journal_id, journal_dir, index, chunks)
+
+            pass_results = await asyncio.gather(*[_run_pass(pc) for pc in PASSES])
 
             # Merge pass results into JournalMetadata
             merged = {}
