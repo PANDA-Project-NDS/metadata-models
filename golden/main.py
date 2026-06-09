@@ -2,13 +2,15 @@ import asyncio
 import itertools
 import json
 import logging
-import os
 import argparse
 import contextlib
 from pathlib import Path
 from typing import Generator
 
+# load dotenv before models to enable WITH_EVIDENCE
 from dotenv import load_dotenv
+load_dotenv()
+
 from agents.base import langfuse, _langfuse_available
 from llama_index.core import Settings
 from db import get_embed_model, make_sentence_splitter
@@ -26,11 +28,7 @@ from golden.lib.flatten import strip_evidence
 from models.journal import JournalMetadata
 
 
-# MUST set WITH_EVIDENCE before any model imports
-os.environ.setdefault("WITH_EVIDENCE", "1")
 
-
-# --- Constants ---
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES_ROOT = PROJECT_ROOT / "journal-samples"
@@ -38,7 +36,6 @@ GOLDEN_OUT = SAMPLES_ROOT / "golden"
 
 
 # --- Field-to-Pass Mapping ---
-
 PASS_FIELDS = {
     0: {"title", "publisher", "issn", "scope", "facts", "metrics"},
     1: {"publication_frequency", "submissions", "policies", "languages", "diamond_open_access"},
@@ -131,8 +128,6 @@ async def main():
     parser.add_argument("--map-parallel", type=int, default=4,
                         help="Max concurrent map-phase LLM calls (default: 4).")
     args = parser.parse_args()
-
-    load_dotenv()
 
     logger = logging.getLogger(__name__)
     logging.basicConfig(
