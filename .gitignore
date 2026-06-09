@@ -1,16 +1,2 @@
-.idea/
 __pycache__/
-.logfire/
-.opencode/
-.venv/
-*.pyc
-.env
-.python-version
-.coverage
-uv.lock
-prompt.md
-
-*.csv
-*.ods
-*.html
-*.json
+metadata_schema.html
