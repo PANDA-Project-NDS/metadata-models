@@ -215,8 +215,15 @@ class MonetaryAmount(BaseModel):
     model_config = ConfigDict(extra="forbid")
     value: int = Field(..., description="Numeric money value (rounded).")
     currency: SupportedCurrency = Field(
-        ..., description="ISO 4217 currency code. USD and EUR only."
+        ..., description="ISO 4217 currency code."
     )
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def coerce_to_int(cls, v):
+        if isinstance(v, float):
+            return int(v)
+        return v
 
 
 class APC(SourcedModel):
