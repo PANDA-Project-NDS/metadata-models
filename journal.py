@@ -250,6 +250,16 @@ class APC(SourcedModel):
     # TODO: List of fees in different currencies here or as list(APC)?
     fee: MonetaryAmount = Field(..., description="Price of APC")
 
+    def __hash__(self):
+        return hash((self.article_type, self.category, self.fee.value, self.fee.currency))
+
+    def __eq__(self, other):
+        if isinstance(other, APC):
+            return (self.article_type, self.category, self.fee.value, self.fee.currency) == (
+                other.article_type, other.category, other.fee.value, other.fee.currency
+            )
+        return super().__eq__(other)
+
 
 class Discount(BaseModel):
     """Information about waivers or discounts available for publication fees."""
@@ -407,6 +417,11 @@ class Pricing(BaseModel):
     discounts: List[Discount] = Field(
         default_factory=list, description="Waivers and discounts."
     )
+
+    @model_validator(mode="after")
+    def dedup_apcs(self) -> "Pricing":
+        self.article_processing_charges = list(dict.fromkeys(self.article_processing_charges))
+        return self
 
 
 # --- Agent Extraction Targets ---
