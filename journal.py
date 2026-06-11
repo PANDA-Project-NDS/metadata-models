@@ -247,10 +247,11 @@ class APC(SourcedModel):
         default=None,
         description="Optional category label",
     )
+    # TODO: List of fees in different currencies here or as list(APC)?
     fee: MonetaryAmount = Field(..., description="Price of APC")
 
 
-class Discount(SourcedModel):
+class Discount(BaseModel):
     """Information about waivers or discounts available for publication fees."""
 
     model_config = ConfigDict(extra="forbid")
@@ -263,8 +264,8 @@ class Discount(SourcedModel):
     percentage: Optional[float] = Field(
         default=None, description="Percentage discount amount if applicable."
     )
-    eligibility: Optional[str] = Field(
-        default=None, description="Criteria for discount eligibility as stated (quote)."
+    eligibility: str = Field(
+        ..., description="Criteria for discount eligibility as stated (quote)."
     )
 
     @model_validator(mode="after")

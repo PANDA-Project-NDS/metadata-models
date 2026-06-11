@@ -79,4 +79,4 @@ type IndexingService = Literal[
     "CrossRef",
 ]
 type MembershipType = Literal["society", "institutional", "individual", "corporate"]
-type DiscountType = Literal["waiver", "fixed", "percent"]
+type DiscountType = Literal["waiver", "fixed", "percent", "unspecified"]
