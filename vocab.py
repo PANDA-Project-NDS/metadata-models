@@ -61,6 +61,7 @@ type ArticleTypeValue = Literal[
     "transcription",
     "working paper",
 ]
+# TODO: how many to list? Journals mention more.
 type IndexingService = Literal[
     "Scopus",
     "Web of Science",
@@ -70,13 +71,18 @@ type IndexingService = Literal[
     "MEDLINE",
     "Engineering Village",
     "IEEE Xplore",
-    "Chemical Abstracts Service",
+    "Chemical Abstracts Service (CAS)",
     "PsycINFO",
-    "ERIC",
-    "DOAJ",
+    "Education Resources Information Center (ERIC)",
+    "Directory of Open Access Journals (DOAJ)",
     "Sherpa Romeo",
     "OpenAlex",
     "CrossRef",
+    "Science Citation Index Expanded (SCIE)",
+    "SCImago Journal Rank (SJR)",
+    "Ei Compendex",
+    "Cumulative Index to Nursing and Allied Health Literature (CINAHL)",
+    "Embase",
 ]
 type MembershipType = Literal["society", "institutional", "individual", "corporate"]
 type DiscountType = Literal["waiver", "fixed", "percent", "unspecified"]

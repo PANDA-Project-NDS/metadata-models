@@ -1,6 +1,6 @@
 import os
 import re
-from typing import List, Optional, TypeVar, Generic, TYPE_CHECKING
+from typing import List, Optional, TypeVar, Generic, TYPE_CHECKING, Set
 from dotenv import load_dotenv
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
@@ -288,8 +288,15 @@ class ArticleType(SourcedModel):
         default=None, description="Optional supplementary notes."
     )
 
+    def __hash__(self):
+        return hash(self.type)
 
-class Editor(SourcedModel):
+    def __eq__(self, other):
+        if isinstance(other, ArticleType):
+            return self.type == other.type
+        return super().__eq__(other)
+
+class Editor(BaseModel):
     """Member of the journal's editorial board."""
 
     model_config = ConfigDict(extra="forbid")
@@ -298,18 +305,18 @@ class Editor(SourcedModel):
     role: Optional[str] = Field(
         default=None, description="Role or title as stated (e.g., 'Editor-in-Chief')."
     )
-    affiliations: List[str] = Field(
-        default_factory=list,
-        description="List of institutional affiliations. Institute names, not locations.",
+    affiliations: Set[str] = Field(
+        default_factory=set,
+        description="Set of institutional affiliations. Institute names, not locations.",
     )
 
     @field_validator("affiliations", mode="before")
     @classmethod
-    def coerce_to_list(cls, v):
+    def coerce_to_set(cls, v):
         if v is None or v == "":
-            return []
+            return set()
         if isinstance(v, str):
-            return [v]
+            return {v}
         return v
 
 
@@ -356,10 +363,9 @@ class Facts(BaseModel):
     abbreviation: Optional[SourcedValue[str]] = Field(
         default=None, description="Journal abbreviation."
     )
-    indexed_in: Optional[SourcedValue[List[IndexingService]]] = Field(
+    indexed_in: Optional[SourcedValue[Set[IndexingService]]] = Field(
         default=None, description="Indexing services."
     )
-
 
 # --- Modular Domain Blocks ---
 
@@ -372,8 +378,8 @@ class SubmissionInfo(BaseModel):
     submission_guidelines: Optional[SourcedValue[str]] = Field(
         default=None, description="Full submission guidelines text."
     )
-    article_types: List[ArticleType] = Field(
-        default_factory=list, description="List of supported article types."
+    article_types: Set[ArticleType] = Field(
+        default_factory=set, description="Set of supported article types."
     )
 
 
@@ -434,7 +440,7 @@ class PoliciesExtraction(BaseModel):
     publication_frequency: Optional[PublicationFrequency] = Field(default=None)
     submissions: Optional[SubmissionInfo] = Field(default=None)
     policies: Optional[ReviewAndPolicy] = Field(default=None)
-    languages: Optional[SourcedValue[List[str]]] = Field(
+    languages: Optional[SourcedValue[Set[str]]] = Field(
         default=None,
         description="ISO 639-2/T language codes (e.g., 'eng', 'fra', 'deu').",
     )
