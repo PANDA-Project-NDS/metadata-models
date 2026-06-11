@@ -72,16 +72,16 @@ class CleanSourcedValue(CleanSourcedModel, Generic[T]):
 class EvidenceSourcedModel(CleanSourcedModel):
     """Provide combined evidence for multiple values of a sub-object."""
 
-    evidence: Optional[Evidence] = Field(
-        default=None, description="Evidence supporting this specific value."
+    evidence: Evidence = Field(
+        ..., description="Evidence supporting this specific value."
     )
 
 
 class EvidenceSourcedValue(CleanSourcedValue, Generic[T]):
     """A value paired with its supporting evidence."""
 
-    evidence: Optional[Evidence] = Field(
-        default=None, description="Evidence supporting this specific value."
+    evidence: Evidence = Field(
+        ..., description="Evidence supporting this specific value."
     )
 
 
