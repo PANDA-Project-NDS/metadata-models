@@ -185,18 +185,28 @@ class DiamondOpenAccess(SourcedModel):
 
 
 class ISSN(BaseModel):
-    """International Standard Serial Number identifiers."""
+    """International Standard Serial Number identifiers in NNNN-NNNN form."""
 
     model_config = ConfigDict(extra="forbid")
     print: Optional[SourcedValue[str]] = Field(
-        default=None, description="Print ISSN in NNNN-NNNN form."
+        default=None, description="Print ISSN (ISSN-P)"
     )
     online: Optional[SourcedValue[str]] = Field(
-        default=None, description="Online ISSN in NNNN-NNNN form."
+        default=None, description="Online ISSN (ISSN-E / eISSN)"
     )
     linking: Optional[SourcedValue[str]] = Field(
-        default=None, description="Linking ISSN (ISSN-L) in NNNN-NNNN form."
+        default=None, description="Linking ISSN (ISSN-L) if stated explicitly"
     )
+
+    @field_validator("print", "online", "linking", mode="before")
+    @classmethod
+    def fix_issn_dash(cls, v):
+        """Add dash to ISSN if given without"""
+        if v is None:
+            return v
+        if isinstance(v, CleanSourcedValue) and isinstance(v.value, str) and len(v.value) == 8:
+            v.value = f"{v.value[:4]}-{v.value[4:]}"
+        return v
 
     @field_validator("print", "online", "linking")
     @classmethod
