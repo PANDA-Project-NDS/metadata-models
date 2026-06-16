@@ -1,14 +1,11 @@
 # Journal Metadata Models
 
-Standalone domain specification that defines the canonical representation of scholarly journal metadata. 
-Establishes the data structures, validation rules, and vocabularies required to describe a journal's identity, editorial governance, publication policies, and pricing models in a machine-readable format.
+This repository defines a standalone domain specification for journal metadata, derived from the [Journal Metadata Exchange Format (JMEF) v1.0](https://journalmetadata.org/version-1.0/doc.html). It extends the JMEF specification to support the high-precision requirements of APC research and evidence-based extraction.
 
-By leveraging Pydantic, these models provide a rigorous schema that ensures data consistency across any system consuming this metadata. This specification incorporates industry-relevant standards, such as **COARS** for article type classification and **DIAMAS/CRAFT-OA** for Diamond Open Access characterization.
-
-## 🗝 Key Concepts
+## Key Concepts
 
 ### Evidence-Sourced Values
-Models support two modes of operation controlled by the `WITH_EVIDENCE` environment variable:
+To support a "Two-Judge" evaluation system, the models support two modes of operation controlled by the `WITH_EVIDENCE` environment variable:
 
 - **Evidence Mode (`WITH_EVIDENCE=1`)**: Uses `EvidenceSourcedValue`. Every extracted value is paired with an `Evidence` object containing the verbatim quote from the source text and a source identifier.
 - **Clean Mode (`WITH_EVIDENCE=0`)**: Uses `CleanSourcedValue`. Only the final extracted value is stored.
@@ -22,6 +19,13 @@ The canonical `JournalMetadata` model is a composite of four modular sub-schemas
 2. **Policies**: Publication frequency, submission guidelines, review policies, and open access criteria.
 3. **Fees**: Article Processing Charges (APCs), discounts, and membership models.
 4. **Editorial**: Editorial board members, their roles, and affiliations.
+
+### Extended Pricing Model (Beyond JMEF)
+While JMEF primarily treats pricing as a binary "no-fees" criterion for Diamond OA qualification, this specification implements a comprehensive pricing engine:
+- **Granular APCs**: Maps specific fees to article types (e.g., "Review" vs "Research") or custom categories.
+- **Monetary Precision**: Enforces ISO 4217 currency standards to ensure consistent and accurate financial tracking.
+- **Complex Discounts**: Tracks fixed, percent, and waiver types, capturing the verbatim eligibility criteria.
+- **Membership Dependency**: Tracks whether pricing and discounts are contingent upon society or institutional membership.
 
 ## Schema Components
 
@@ -39,11 +43,16 @@ To ensure data canonicalization, the package defines several `Literal` types for
 - `Frequency`: Canonical publication frequencies (e.g., Monthly, Quarterly).
 - `ReviewType`: Peer review workflows (e.g., single-blind, double-blind, open-review).
 
-## ⚖Validation
+## Validation
 The models employ Pydantic validators to maintain high data quality:
 - **Format Validation**: Enforces strict regex for ISSNs.
 - **Type Coercion**: Ensures monetary values are rounded to integers and affiliations are stored as sets.
 - **Logic Validation**: Ensures that 'fixed' discounts have an associated amount and 'percent' discounts have a percentage.
+
+## Scripts
+The repository includes utility scripts for schema distribution:
+- `scripts/dump_clean_schema.py`: Generates a self-contained JSON schema with all internal references inlined.
+- `scripts/metadata_schema_html.py`: Generates a human-readable HTML version of the schema documentation.
 
 ## Usage
 
