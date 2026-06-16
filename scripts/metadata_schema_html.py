@@ -12,28 +12,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from journal import JournalMetadata
 
 
-def inline_refs(schema: dict) -> dict:
-    """Recursively inline all $ref references from $defs."""
-    defs = schema.get("$defs", {})
+def resolve_refs(obj):
+    defs = obj.pop("$defs", {})
 
-    def _inline(obj):
+    def _inline(obj, defs):
         if isinstance(obj, dict):
             if "$ref" in obj:
-                ref_name = obj["$ref"].split("/")[-1]
-                if ref_name in defs:
-                    resolved = _inline(defs[ref_name])
-                    for k, v in obj.items():
-                        if k != "$ref":
-                            resolved[k] = v
-                    return resolved
-            return {k: _inline(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [_inline(item) for item in obj]
+                ref_path = obj["$ref"]
+                if ref_path.startswith("#/$defs/"):
+                    def_name = ref_path.split("/", 2)[2]
+                    return _inline(defs.get(def_name, {}), defs)
+            return {k: _inline(v, defs) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [_inline(item, defs) for item in obj]
         return obj
 
-    result = _inline(schema)
-    result.pop("$defs", None)
-    return result
+    return _inline(obj, defs)
 
 
 def type_badge(prop: dict | str) -> str:
@@ -156,7 +150,7 @@ def render_field(name: str, prop: dict, required: bool = False, depth: int = 0) 
 
 
 def main() -> None:
-    schema = inline_refs(JournalMetadata.model_json_schema())
+    schema = resolve_refs(JournalMetadata.model_json_schema())
     props = schema.get("properties", {})
 
     fields_html = ""
@@ -274,11 +268,8 @@ def main() -> None:
 </body>
 </html>"""
 
-    out = Path(__file__).resolve().parent.parent / "metadata_schema.html"
-    with open(out, "w") as f:
-        f.write(html)
 
-    print(f"Written {out}")
+    print(html)
 
 
 if __name__ == "__main__":
