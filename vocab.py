@@ -1,7 +1,7 @@
 from typing import Literal
 
 type ReviewType = Literal["single-blind", "double-blind", "open-review"]
-type SupportedCurrency = Literal["USD", "EUR", "CHF", "GBP", "JPY", "CAD"]
+type SupportedCurrency = Literal["USD", "EUR", "CHF", "GBP", "JPY", "CAD", "AUD"]
 type Frequency = Literal[
     "Annually",
     "Semiannually",
