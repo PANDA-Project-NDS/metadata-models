@@ -104,12 +104,12 @@ class PublicationFrequency(SourcedModel):
 
 
 class ReviewProcess(BaseModel):
-    """Details regarding the peer review workflow and type."""
+    """Reviewing process used by the journal."""
 
     model_config = ConfigDict(extra="forbid")
     type: Optional[SourcedValue[ReviewType]] = Field(
         default=None,
-        description="Canonical review type. Null if not applicable.",
+        description="Type of the review process.",
     )
     description: Optional[SourcedValue[str]] = Field(
         default=None,
@@ -245,7 +245,7 @@ class APC(SourcedModel):
     )
     category: Optional[str] = Field(
         default=None,
-        description="Optional category label",
+        description="Category label instead of or additional to `article_type`.",
     )
     # TODO: List of fees in different currencies here or as list(APC)?
     fee: MonetaryAmount = Field(..., description="Price of APC")
@@ -398,19 +398,25 @@ class SubmissionInfo(BaseModel):
     article_types: Set[ArticleType] = Field(
         default_factory=set, description="Set of supported article types."
     )
+    languages: Optional[SourcedValue[Set[str]]] = Field(
+        default=None,
+        description="Accepted languages for article submissions. ISO 639-2/T language codes (e.g., 'eng', 'fra', 'deu').",
+    )
 
 
-class ReviewAndPolicy(BaseModel):
-    """Peer review workflow and additional publisher policies."""
+class PublicationPolicy(BaseModel):
+    """Policies related to the publication process in the journal."""
 
     model_config = ConfigDict(extra="forbid")
 
     review_process: Optional[ReviewProcess] = Field(
-        default=None, description="Review workflow details."
+        default=None, description="Review process details."
     )
-    additional_information: Optional[PublisherPolicies] = Field(
+    publisher_policies: Optional[PublisherPolicies] = Field(
         default=None, description="Publisher-specific policy details."
     )
+    # TODO
+    #licences: Set[str] = Field(default=set(), description="licenses under which the journal publishes its contents.")
 
 
 class Pricing(BaseModel):
@@ -454,18 +460,14 @@ class BasicInfoExtraction(BaseModel):
 
 
 class PoliciesExtraction(BaseModel):
-    """Pass 2: Extracts publication frequency, submission guidelines, and review policies, accepted languages and
+    """Pass 2: Extracts publication frequency, submission guidelines, and publication policies, accepted languages and
     open access criteria."""
 
     model_config = ConfigDict(extra="forbid")
 
     publication_frequency: Optional[PublicationFrequency] = Field(default=None)
     submissions: Optional[SubmissionInfo] = Field(default=None)
-    policies: Optional[ReviewAndPolicy] = Field(default=None)
-    languages: Optional[SourcedValue[Set[str]]] = Field(
-        default=None,
-        description="ISO 639-2/T language codes (e.g., 'eng', 'fra', 'deu').",
-    )
+    publication_policy: Optional[PublicationPolicy] = Field(default=None)
     diamond_open_access: Optional[DiamondOpenAccess] = Field(default=None)
 
 
