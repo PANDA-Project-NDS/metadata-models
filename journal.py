@@ -277,6 +277,7 @@ class Discount(BaseModel):
     eligibility: str = Field(
         ..., description="Criteria for discount eligibility as stated (quote)."
     )
+    membership_required: bool = Field(False, description="Discount requires active membership.")
 
     @model_validator(mode="after")
     def validate_discount_fields(self) -> "Discount":
@@ -286,6 +287,12 @@ class Discount(BaseModel):
             raise ValueError("'percent' discount requires 'percentage'")
         if self.type == "waiver" and self.amount is not None and self.percentage is not None:
             raise ValueError("'waiver' discount should not have 'amount' or 'percentage'")
+
+        # convert 100 percent to waiver
+        if self.type == "percent" and self.percentage == 100.0:
+            self.percentage = None
+            self.type = "waiver"
+
         return self
 
 
