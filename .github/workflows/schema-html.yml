@@ -22,7 +22,7 @@ jobs:
         run: uv sync
 
       - name: Generate HTML
-        run: uv run metadata_schema_html.py > metadata-schema.html
+        run: uv run scripts/metadata_schema_html.py > metadata-schema.html
 
       - name: Generate JSON Schema
         run: uv run scripts/dump_clean_schema.py > metadata-schema.json
