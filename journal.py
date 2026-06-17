@@ -260,6 +260,12 @@ class APC(SourcedModel):
             )
         return super().__eq__(other)
 
+    @model_validator(mode="after")
+    def validate_type(self) -> "APC":
+        if self.article_type is None and self.category is None:
+            raise ValueError("Either article_type or category must be set.")
+        return self
+
 
 class Discount(BaseModel):
     """Information about waivers or discounts available for publication fees."""
@@ -392,7 +398,7 @@ class SubmissionInfo(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    submission_guidelines: Optional[SourcedValue[str]] = Field(
+    submission_guidelines: Optional[str] = Field(
         default=None, description="Full submission guidelines text."
     )
     article_types: Set[ArticleType] = Field(
