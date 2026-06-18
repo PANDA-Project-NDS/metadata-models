@@ -228,15 +228,22 @@ class ISSN(_JsonStringParser, BaseModel):
     @field_validator("print", "online", "linking", mode="before")
     @classmethod
     def fix_issn_dash(cls, v):
-        """Add dash to ISSN if given without"""
+        """Add dash to ISSN if given without — handles dict (JSON) and CleanSourcedValue (Python) input."""
         if v is None:
             return v
-        if (
-            isinstance(v, CleanSourcedValue)
-            and isinstance(v.value, str)
-            and len(v.value) == 8
-        ):
-            v.value = f"{v.value[:4]}-{v.value[4:]}"
+        raw = None
+        if isinstance(v, dict):
+            raw = v.get("value")
+        elif isinstance(v, CleanSourcedValue):
+            raw = v.value
+        if isinstance(raw, str):
+            cleaned = raw.replace(" ", "")
+            if len(cleaned) == 8:
+                fixed = f"{cleaned[:4]}-{cleaned[4:]}"
+                if isinstance(v, dict):
+                    v["value"] = fixed
+                else:
+                    v.value = fixed
         return v
 
     @field_validator("print", "online", "linking")
@@ -257,11 +264,23 @@ class MonetaryAmount(BaseModel):
     value: int = Field(..., description="Numeric money value (rounded).")
     currency: SupportedCurrency = Field(..., description="ISO 4217 currency code.")
 
+    @field_validator("currency", mode="before")
+    @classmethod
+    def normalize_currency_case(cls, v):
+        """Normalize currency code to uppercase (e.g., 'usd' -> 'USD')."""
+        if isinstance(v, str):
+            return v.upper()
+        return v
+
     @field_validator("value", mode="before")
     @classmethod
     def coerce_to_int(cls, v):
         if isinstance(v, float):
             return int(v)
+        if isinstance(v, str):
+            match = re.search(r"\d+", v.replace(",", ""))
+            if match:
+                return int(match.group())
         return v
 
     def __hash__(self):
