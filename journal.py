@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from typing import TYPE_CHECKING, Any, Generic, List, Optional, Set, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, List, Optional, TypeVar
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -264,6 +264,8 @@ class MonetaryAmount(BaseModel):
             return int(v)
         return v
 
+    def __hash__(self):
+        return hash((self.value, self.currency))
 
 class APC(SourcedModel):
     """Article Processing Charge details for a specific category or article type."""
@@ -278,34 +280,47 @@ class APC(SourcedModel):
         default=None,
         description="Category label instead of or additional to `article_type`.",
     )
-    # TODO: List of fees in different currencies here or as list(APC)?
-    fee: MonetaryAmount = Field(..., description="Price of APC")
+    per_page: bool = Field(default=False, description="APC charged per page.")
+    per_figure: bool = Field(default=False, description="APC charged per figure.")
+    fee: List[MonetaryAmount] = Field(
+        default_factory=list, description="Price of APC. One per currency."
+    )
+
+    @field_validator("fee", mode="before")
+    @classmethod
+    def coerce_fee_to_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return v
+        # Single MonetaryAmount object or dict — wrap in list.
+        if isinstance(v, (MonetaryAmount, dict)):
+            return [v]
+        return v
 
     def __hash__(self):
-        return hash(
-            (self.article_type, self.category, self.fee.value, self.fee.currency)
-        )
+        return hash((self.article_type, self.category, self.per_page, self.per_figure))
 
     def __eq__(self, other):
         if isinstance(other, APC):
             return (
                 self.article_type,
                 self.category,
-                self.fee.value,
-                self.fee.currency,
+                self.per_page,
+                self.per_figure,
             ) == (
                 other.article_type,
                 other.category,
-                other.fee.value,
-                other.fee.currency,
+                other.per_page,
+                other.per_figure,
             )
         return super().__eq__(other)
 
     @model_validator(mode="after")
-    def validate_type(self) -> "APC":
-        if self.article_type is None and self.category is None:
-            raise ValueError("Either article_type or category must be set.")
+    def dedup_sort_fees(self) -> "APC":
+        self.fee = sorted(dict.fromkeys(self.fee), key=lambda f: f.currency)
         return self
+
 
 
 class Discount(BaseModel):
@@ -376,7 +391,7 @@ class Editor(BaseModel):
     role: Optional[str] = Field(
         default=None, description="Role or title as stated (e.g., 'Editor-in-Chief')."
     )
-    affiliations: Set[str] = Field(
+    affiliations: set[str] = Field(
         default_factory=set,
         description="Set of institutional affiliations. Institute names, not locations.",
     )
@@ -434,7 +449,7 @@ class Facts(_JsonStringParser, BaseModel):
     abbreviation: Optional[SourcedValue[str]] = Field(
         default=None, description="Journal abbreviation."
     )
-    indexed_in: Optional[SourcedValue[Set[IndexingService]]] = Field(
+    indexed_in: Optional[SourcedValue[set[IndexingService]]] = Field(
         default=None, description="Indexing services."
     )
 
@@ -450,10 +465,10 @@ class SubmissionInfo(_JsonStringParser, BaseModel):
     submission_guidelines: Optional[str] = Field(
         default=None, description="Full submission guidelines text."
     )
-    article_types: Set[ArticleType] = Field(
+    article_types: set[ArticleType] = Field(
         default_factory=set, description="Set of supported article types."
     )
-    languages: Optional[SourcedValue[Set[str]]] = Field(
+    languages: Optional[SourcedValue[set[str]]] = Field(
         default=None,
         description="Accepted languages for article submissions. ISO 639-2/T language codes (e.g., 'eng', 'fra', 'deu').",
     )
@@ -488,9 +503,19 @@ class Pricing(BaseModel):
 
     @model_validator(mode="after")
     def dedup_apcs(self) -> "Pricing":
-        self.article_processing_charges = list(
-            dict.fromkeys(self.article_processing_charges)
-        )
+        seen: dict[tuple, APC] = {}
+        for apc in self.article_processing_charges:
+            key = (apc.article_type, apc.category, apc.per_page, apc.per_figure)
+            if key in seen:
+                existing = seen[key]
+                existing_key_vals = {(f.value, f.currency) for f in existing.fee}
+                for f in apc.fee:
+                    if (f.value, f.currency) not in existing_key_vals:
+                        existing.fee.append(f)
+                existing.fee = sorted(existing.fee, key=lambda f: f.currency)
+            else:
+                seen[key] = apc
+        self.article_processing_charges = list(seen.values())
         return self
 
 
