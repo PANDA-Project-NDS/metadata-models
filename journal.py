@@ -15,6 +15,7 @@ try:
         MembershipType,
         ReviewType,
         SupportedCurrency,
+        publisher_examples,
     )
 except ImportError:
     from vocab import (
