@@ -78,7 +78,6 @@ type IndexingService = Literal[
     "Sherpa Romeo",
     "OpenAlex",
     "CrossRef",
-    "Science Citation Index Expanded (SCIE)",
     "SCImago Journal Rank (SJR)",
     "Ei Compendex",
     "Cumulative Index to Nursing and Allied Health Literature (CINAHL)",

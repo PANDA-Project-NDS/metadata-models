@@ -1,29 +1,30 @@
+import json
 import os
 import re
-from typing import List, Optional, TypeVar, Generic, TYPE_CHECKING, Set
-from dotenv import load_dotenv
+from typing import TYPE_CHECKING, Any, Generic, List, Optional, Set, TypeVar
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from dotenv import load_dotenv
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 try:
     from .vocab import (
-        Frequency,
-        ReviewType,
         ArticleTypeValue,
-        SupportedCurrency,
+        DiscountType,
+        Frequency,
         IndexingService,
         MembershipType,
-        DiscountType,
+        ReviewType,
+        SupportedCurrency,
     )
 except ImportError:
     from vocab import (
-        Frequency,
-        ReviewType,
         ArticleTypeValue,
-        SupportedCurrency,
+        DiscountType,
+        Frequency,
         IndexingService,
         MembershipType,
-        DiscountType,
+        ReviewType,
+        SupportedCurrency,
     )
 
 T = TypeVar("T")
@@ -40,6 +41,27 @@ else:
     )
 
 
+class _JsonStringParser:
+    """Mixin: auto-parses JSON-string input into dict before Pydantic validation.
+
+    Defends against LLM double-encoding field values as JSON strings instead of
+    objects (e.g. ``"title": "{\\"value\\": \\"X\\"}"`` instead of
+    ``"title": {"value": "X"}``).
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _auto_parse_json_string(cls, data: Any) -> Any:
+        if isinstance(data, str):
+            try:
+                parsed = json.loads(data)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return data
+
+
 class Evidence(BaseModel):
     """Container for evidence supporting an extracted value."""
 
@@ -53,7 +75,7 @@ class Evidence(BaseModel):
 # --- Clean variants (no evidence) ---
 
 
-class CleanSourcedModel(BaseModel):
+class CleanSourcedModel(_JsonStringParser, BaseModel):
     """Provide combined evidence for multiple values of a sub-object."""
 
     model_config = ConfigDict(extra="forbid")
@@ -103,10 +125,11 @@ class PublicationFrequency(SourcedModel):
     )
 
 
-class ReviewProcess(BaseModel):
+class ReviewProcess(_JsonStringParser, BaseModel):
     """Reviewing process used by the journal."""
 
     model_config = ConfigDict(extra="forbid")
+
     type: Optional[SourcedValue[ReviewType]] = Field(
         default=None,
         description="Type of the review process.",
@@ -117,10 +140,11 @@ class ReviewProcess(BaseModel):
     )
 
 
-class Membership(BaseModel):
+class Membership(_JsonStringParser, BaseModel):
     """Information about society or institutional membership models."""
 
     model_config = ConfigDict(extra="forbid")
+
     type: Optional[SourcedValue[MembershipType]] = Field(
         default=None, description="Membership type (e.g., 'society', 'institutional')."
     )
@@ -184,10 +208,11 @@ class DiamondOpenAccess(SourcedModel):
     )
 
 
-class ISSN(BaseModel):
+class ISSN(_JsonStringParser, BaseModel):
     """International Standard Serial Number identifiers in NNNN-NNNN form."""
 
     model_config = ConfigDict(extra="forbid")
+
     print: Optional[SourcedValue[str]] = Field(
         default=None, description="Print ISSN (ISSN-P)"
     )
@@ -204,7 +229,11 @@ class ISSN(BaseModel):
         """Add dash to ISSN if given without"""
         if v is None:
             return v
-        if isinstance(v, CleanSourcedValue) and isinstance(v.value, str) and len(v.value) == 8:
+        if (
+            isinstance(v, CleanSourcedValue)
+            and isinstance(v.value, str)
+            and len(v.value) == 8
+        ):
             v.value = f"{v.value[:4]}-{v.value[4:]}"
         return v
 
@@ -224,9 +253,7 @@ class MonetaryAmount(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     value: int = Field(..., description="Numeric money value (rounded).")
-    currency: SupportedCurrency = Field(
-        ..., description="ISO 4217 currency code."
-    )
+    currency: SupportedCurrency = Field(..., description="ISO 4217 currency code.")
 
     @field_validator("value", mode="before")
     @classmethod
@@ -239,6 +266,8 @@ class MonetaryAmount(BaseModel):
 class APC(SourcedModel):
     """Article Processing Charge details for a specific category or article type."""
 
+    # TODO: PAGE/color figure charges?
+    # TODO: field for CC licence type dependent
     model_config = ConfigDict(extra="forbid")
     article_type: Optional[ArticleTypeValue] = Field(
         default=None, description="Article type this fee applies to."
@@ -251,12 +280,22 @@ class APC(SourcedModel):
     fee: MonetaryAmount = Field(..., description="Price of APC")
 
     def __hash__(self):
-        return hash((self.article_type, self.category, self.fee.value, self.fee.currency))
+        return hash(
+            (self.article_type, self.category, self.fee.value, self.fee.currency)
+        )
 
     def __eq__(self, other):
         if isinstance(other, APC):
-            return (self.article_type, self.category, self.fee.value, self.fee.currency) == (
-                other.article_type, other.category, other.fee.value, other.fee.currency
+            return (
+                self.article_type,
+                self.category,
+                self.fee.value,
+                self.fee.currency,
+            ) == (
+                other.article_type,
+                other.category,
+                other.fee.value,
+                other.fee.currency,
             )
         return super().__eq__(other)
 
@@ -271,9 +310,7 @@ class Discount(BaseModel):
     """Information about waivers or discounts available for publication fees."""
 
     model_config = ConfigDict(extra="forbid")
-    type: DiscountType = Field(
-        ..., description="Discount type label."
-    )
+    type: DiscountType = Field(..., description="Discount type label.")
     amount: Optional[MonetaryAmount] = Field(
         default=None, description="Fixed monetary discount amount if applicable."
     )
@@ -283,7 +320,9 @@ class Discount(BaseModel):
     eligibility: str = Field(
         ..., description="Criteria for discount eligibility as stated (quote)."
     )
-    membership_required: bool = Field(False, description="Discount requires active membership.")
+    membership_required: bool = Field(
+        False, description="Discount requires active membership."
+    )
 
     @model_validator(mode="after")
     def validate_discount_fields(self) -> "Discount":
@@ -291,8 +330,14 @@ class Discount(BaseModel):
             raise ValueError("'fixed' discount requires 'amount'")
         if self.type == "percent" and self.percentage is None:
             raise ValueError("'percent' discount requires 'percentage'")
-        if self.type == "waiver" and self.amount is not None and self.percentage is not None:
-            raise ValueError("'waiver' discount should not have 'amount' or 'percentage'")
+        if (
+            self.type == "waiver"
+            and self.amount is not None
+            and self.percentage is not None
+        ):
+            raise ValueError(
+                "'waiver' discount should not have 'amount' or 'percentage'"
+            )
 
         # convert 100 percent to waiver
         if self.type == "percent" and self.percentage == 100.0:
@@ -319,6 +364,7 @@ class ArticleType(SourcedModel):
             return self.type == other.type
         return super().__eq__(other)
 
+
 class Editor(BaseModel):
     """Member of the journal's editorial board."""
 
@@ -343,7 +389,7 @@ class Editor(BaseModel):
         return v
 
 
-class PublisherPolicies(BaseModel):
+class PublisherPolicies(_JsonStringParser, BaseModel):
     """Publisher-specific metadata and policy statements."""
 
     model_config = ConfigDict(extra="forbid")
@@ -359,7 +405,7 @@ class PublisherPolicies(BaseModel):
     )
 
 
-class Metrics(BaseModel):
+class Metrics(_JsonStringParser, BaseModel):
     """Quantifiable journal metrics."""
 
     model_config = ConfigDict(extra="forbid")
@@ -375,7 +421,7 @@ class Metrics(BaseModel):
     )
 
 
-class Facts(BaseModel):
+class Facts(_JsonStringParser, BaseModel):
     """Brief metadata summary, often found in 'Journal Facts' sidebars."""
 
     model_config = ConfigDict(extra="forbid")
@@ -390,10 +436,11 @@ class Facts(BaseModel):
         default=None, description="Indexing services."
     )
 
+
 # --- Modular Domain Blocks ---
 
 
-class SubmissionInfo(BaseModel):
+class SubmissionInfo(_JsonStringParser, BaseModel):
     """Details regarding article submissions."""
 
     model_config = ConfigDict(extra="forbid")
@@ -422,7 +469,7 @@ class PublicationPolicy(BaseModel):
         default=None, description="Publisher-specific policy details."
     )
     # TODO
-    #licences: Set[str] = Field(default=set(), description="licenses under which the journal publishes its contents.")
+    # licences: Set[str] = Field(default=set(), description="licenses under which the journal publishes its contents.")
 
 
 class Pricing(BaseModel):
@@ -439,14 +486,16 @@ class Pricing(BaseModel):
 
     @model_validator(mode="after")
     def dedup_apcs(self) -> "Pricing":
-        self.article_processing_charges = list(dict.fromkeys(self.article_processing_charges))
+        self.article_processing_charges = list(
+            dict.fromkeys(self.article_processing_charges)
+        )
         return self
 
 
 # --- Agent Extraction Targets ---
 
 
-class BasicInfoExtraction(BaseModel):
+class BasicInfoExtraction(_JsonStringParser, BaseModel):
     """Pass 1: Extracts basic journal information, scope, and identifiers."""
 
     model_config = ConfigDict(extra="forbid")
@@ -465,7 +514,7 @@ class BasicInfoExtraction(BaseModel):
     metrics: Optional[Metrics] = Field(default=None, description="Journal metrics")
 
 
-class PoliciesExtraction(BaseModel):
+class PoliciesExtraction(_JsonStringParser, BaseModel):
     """Pass 2: Extracts publication frequency, submission guidelines, and publication policies, accepted languages and
     open access criteria."""
 
