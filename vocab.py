@@ -1,5 +1,19 @@
 from typing import Literal
 
+publisher_examples = [
+    "American Chemical Society",
+    "Copernicus Publications",
+    "Elsevier",
+    "Emerald Publishing",
+    "Frontiers Media S.A.",
+    "IEEE",
+    "MDPI AG",
+    "SAGE Publishing",
+    "Springer Nature",
+    "Taylor & Francis",
+    "Wiley",
+]
+
 type ReviewType = Literal["single-blind", "double-blind", "open-review"]
 type SupportedCurrency = Literal["USD", "EUR", "CHF", "GBP", "JPY", "CAD", "AUD"]
 type Frequency = Literal[

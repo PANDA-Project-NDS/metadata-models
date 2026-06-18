@@ -25,6 +25,7 @@ except ImportError:
         MembershipType,
         ReviewType,
         SupportedCurrency,
+        publisher_examples,
     )
 
 T = TypeVar("T")
@@ -457,7 +458,7 @@ class SubmissionInfo(_JsonStringParser, BaseModel):
     )
 
 
-class PublicationPolicy(BaseModel):
+class PublicationPolicy(_JsonStringParser, BaseModel):
     """Policies related to the publication process in the journal."""
 
     model_config = ConfigDict(extra="forbid")
@@ -504,7 +505,9 @@ class BasicInfoExtraction(_JsonStringParser, BaseModel):
         default=None, description="Canonical journal title."
     )
     publisher: Optional[SourcedValue[str]] = Field(
-        default=None, description="Publisher name."
+        default=None,
+        examples=publisher_examples,
+        description="Publisher name.",
     )
     issn: Optional[ISSN] = Field(default=None, description="ISSN identifiers.")
     scope: Optional[SourcedValue[str]] = Field(
