@@ -63,6 +63,9 @@ class _JsonStringParser:
                 pass
         return data
 
+class JsonHandlingBaseModel(_JsonStringParser, BaseModel):
+    pass
+
 
 class Evidence(BaseModel):
     """Container for evidence supporting an extracted value."""
@@ -77,7 +80,7 @@ class Evidence(BaseModel):
 # --- Clean variants (no evidence) ---
 
 
-class CleanSourcedModel(_JsonStringParser, BaseModel):
+class CleanSourcedModel(JsonHandlingBaseModel):
     """Provide combined evidence for multiple values of a sub-object."""
 
     model_config = ConfigDict(extra="forbid")
@@ -127,7 +130,7 @@ class PublicationFrequency(SourcedModel):
     )
 
 
-class ReviewProcess(_JsonStringParser, BaseModel):
+class ReviewProcess(JsonHandlingBaseModel):
     """Reviewing process used by the journal."""
 
     model_config = ConfigDict(extra="forbid")
@@ -142,7 +145,7 @@ class ReviewProcess(_JsonStringParser, BaseModel):
     )
 
 
-class Membership(_JsonStringParser, BaseModel):
+class Membership(JsonHandlingBaseModel):
     """Information about society or institutional membership models."""
 
     model_config = ConfigDict(extra="forbid")
@@ -210,7 +213,7 @@ class DiamondOpenAccess(SourcedModel):
     )
 
 
-class ISSN(_JsonStringParser, BaseModel):
+class ISSN(JsonHandlingBaseModel):
     """International Standard Serial Number identifiers in NNNN-NNNN form."""
 
     model_config = ConfigDict(extra="forbid")
@@ -257,7 +260,7 @@ class ISSN(_JsonStringParser, BaseModel):
         return v
 
 
-class MonetaryAmount(BaseModel):
+class MonetaryAmount(JsonHandlingBaseModel):
     """Numeric Monetary value with associated currency."""
 
     model_config = ConfigDict(extra="forbid")
@@ -342,7 +345,7 @@ class APC(SourcedModel):
 
 
 
-class Discount(BaseModel):
+class Discount(JsonHandlingBaseModel):
     """Information about waivers or discounts available for publication fees."""
 
     model_config = ConfigDict(extra="forbid")
@@ -401,7 +404,7 @@ class ArticleType(SourcedModel):
         return super().__eq__(other)
 
 
-class Editor(BaseModel):
+class Editor(JsonHandlingBaseModel):
     """Member of the journal's editorial board."""
 
     model_config = ConfigDict(extra="forbid")
@@ -425,7 +428,7 @@ class Editor(BaseModel):
         return v
 
 
-class PublisherPolicies(_JsonStringParser, BaseModel):
+class PublisherPolicies(JsonHandlingBaseModel):
     """Publisher-specific metadata and policy statements."""
 
     model_config = ConfigDict(extra="forbid")
@@ -441,7 +444,7 @@ class PublisherPolicies(_JsonStringParser, BaseModel):
     )
 
 
-class Metrics(_JsonStringParser, BaseModel):
+class Metrics(JsonHandlingBaseModel):
     """Quantifiable journal metrics."""
 
     model_config = ConfigDict(extra="forbid")
@@ -457,7 +460,7 @@ class Metrics(_JsonStringParser, BaseModel):
     )
 
 
-class Facts(_JsonStringParser, BaseModel):
+class Facts(JsonHandlingBaseModel):
     """Brief metadata summary, often found in 'Journal Facts' sidebars."""
 
     model_config = ConfigDict(extra="forbid")
@@ -476,7 +479,7 @@ class Facts(_JsonStringParser, BaseModel):
 # --- Modular Domain Blocks ---
 
 
-class SubmissionInfo(_JsonStringParser, BaseModel):
+class SubmissionInfo(JsonHandlingBaseModel):
     """Details regarding article submissions."""
 
     model_config = ConfigDict(extra="forbid")
@@ -493,7 +496,7 @@ class SubmissionInfo(_JsonStringParser, BaseModel):
     )
 
 
-class PublicationPolicy(_JsonStringParser, BaseModel):
+class PublicationPolicy(JsonHandlingBaseModel):
     """Policies related to the publication process in the journal."""
 
     model_config = ConfigDict(extra="forbid")
@@ -508,7 +511,7 @@ class PublicationPolicy(_JsonStringParser, BaseModel):
     # licences: Set[str] = Field(default=set(), description="licenses under which the journal publishes its contents.")
 
 
-class Pricing(BaseModel):
+class Pricing(JsonHandlingBaseModel):
     """Article processing charges and discounts."""
 
     model_config = ConfigDict(extra="forbid")
@@ -541,7 +544,7 @@ class Pricing(BaseModel):
 # --- Agent Extraction Targets ---
 
 
-class BasicInfoExtraction(_JsonStringParser, BaseModel):
+class BasicInfoExtraction(JsonHandlingBaseModel):
     """Pass 1: Extracts basic journal information, scope, and identifiers."""
 
     model_config = ConfigDict(extra="forbid")
@@ -562,7 +565,7 @@ class BasicInfoExtraction(_JsonStringParser, BaseModel):
     metrics: Optional[Metrics] = Field(default=None, description="Journal metrics")
 
 
-class PoliciesExtraction(_JsonStringParser, BaseModel):
+class PoliciesExtraction(JsonHandlingBaseModel):
     """Pass 2: Extracts publication frequency, submission guidelines, and publication policies, accepted languages and
     open access criteria."""
 
@@ -574,7 +577,7 @@ class PoliciesExtraction(_JsonStringParser, BaseModel):
     diamond_open_access: Optional[DiamondOpenAccess] = Field(default=None)
 
 
-class FeesExtraction(_JsonStringParser, BaseModel):
+class FeesExtraction(JsonHandlingBaseModel):
     """Pass 3: Extracts fees, APCs, discounts, and membership information."""
 
     model_config = ConfigDict(extra="forbid")
@@ -583,7 +586,7 @@ class FeesExtraction(_JsonStringParser, BaseModel):
     membership: Optional[Membership] = Field(default=None)
 
 
-class EditorialExtraction(_JsonStringParser, BaseModel):
+class EditorialExtraction(JsonHandlingBaseModel):
     """Pass 4: Extracts editorial board members and staff."""
 
     model_config = ConfigDict(extra="forbid")
