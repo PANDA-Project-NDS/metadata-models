@@ -574,7 +574,7 @@ class PoliciesExtraction(_JsonStringParser, BaseModel):
     diamond_open_access: Optional[DiamondOpenAccess] = Field(default=None)
 
 
-class FeesExtraction(BaseModel):
+class FeesExtraction(_JsonStringParser, BaseModel):
     """Pass 3: Extracts fees, APCs, discounts, and membership information."""
 
     model_config = ConfigDict(extra="forbid")
@@ -583,7 +583,7 @@ class FeesExtraction(BaseModel):
     membership: Optional[Membership] = Field(default=None)
 
 
-class EditorialExtraction(BaseModel):
+class EditorialExtraction(_JsonStringParser, BaseModel):
     """Pass 4: Extracts editorial board members and staff."""
 
     model_config = ConfigDict(extra="forbid")
