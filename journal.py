@@ -526,19 +526,19 @@ class Pricing(JsonHandlingBaseModel):
 
     @model_validator(mode="after")
     def dedup_apcs(self) -> "Pricing":
-        seen: dict[tuple, APC] = {}
+        """Deduplicate APCs by identity, merging fees for matches."""
+        seen: dict[APC, None] = {} # dict to preserve insertion order
         for apc in self.article_processing_charges:
-            key = (apc.article_type, apc.category, apc.per_page, apc.per_figure)
-            if key in seen:
-                existing = seen[key]
+            if apc in seen:
+                existing = next(e for e in seen if e == apc)
                 existing_key_vals = {(f.value, f.currency) for f in existing.fee}
                 for f in apc.fee:
                     if (f.value, f.currency) not in existing_key_vals:
                         existing.fee.append(f)
                 existing.fee = sorted(existing.fee, key=lambda f: f.currency)
             else:
-                seen[key] = apc
-        self.article_processing_charges = list(seen.values())
+                seen[apc] = None
+        self.article_processing_charges = list(seen)
         return self
 
 
