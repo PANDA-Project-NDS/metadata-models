@@ -292,8 +292,6 @@ class MonetaryAmount(JsonHandlingBaseModel):
 class APC(SourcedModel):
     """Article Processing Charge details for a specific category or article type."""
 
-    # TODO: PAGE/color figure charges?
-    # TODO: field for CC licence type dependent
     model_config = ConfigDict(extra="forbid")
     article_type: Optional[ArticleTypeValue] = Field(
         default=None, description="Article type this fee applies to."
@@ -304,6 +302,7 @@ class APC(SourcedModel):
     )
     per_page: bool = Field(default=False, description="APC charged per page.")
     per_figure: bool = Field(default=False, description="APC charged per figure.")
+    license_related: bool = Field(default=False, description="APC related to specific license.")
     fee: List[MonetaryAmount] = Field(
         default_factory=list, description="Price of APC. One per currency."
     )
@@ -321,7 +320,7 @@ class APC(SourcedModel):
         return v
 
     def __hash__(self):
-        return hash((self.article_type, self.category, self.per_page, self.per_figure))
+        return hash((self.article_type, self.category, self.per_page, self.per_figure, self.license_related))
 
     def __eq__(self, other):
         if isinstance(other, APC):
@@ -330,11 +329,13 @@ class APC(SourcedModel):
                 self.category,
                 self.per_page,
                 self.per_figure,
+                self.license_related
             ) == (
                 other.article_type,
                 other.category,
                 other.per_page,
                 other.per_figure,
+                self.license_related
             )
         return super().__eq__(other)
 
