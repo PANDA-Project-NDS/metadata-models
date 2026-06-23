@@ -99,3 +99,13 @@ type IndexingService = Literal[
 ]
 type MembershipType = Literal["society", "institutional", "individual", "corporate"]
 type DiscountType = Literal["waiver", "fixed", "percent", "unspecified"]
+type LicenseType = Literal[
+    "CC0",
+    "CC BY",
+    "CC BY-SA",
+    "CC BY-ND",
+    "CC BY-NC",
+    "CC BY-NC-SA",
+    "CC BY-NC-ND",
+    "other",
+]

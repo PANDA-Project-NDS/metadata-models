@@ -23,6 +23,7 @@ try:
         ReviewType,
         SupportedCurrency,
         publisher_examples,
+        LicenseType,
     )
 except ImportError:
     from vocab import (
@@ -34,6 +35,7 @@ except ImportError:
         ReviewType,
         SupportedCurrency,
         publisher_examples,
+        LicenseType,
     )
 
 T = TypeVar("T")
@@ -337,8 +339,14 @@ class APC(SourcedModel):
     )
     per_page: bool = Field(default=False, description="APC charged per page.")
     per_figure: bool = Field(default=False, description="APC charged per figure.")
+    license_name: Optional[str] = Field(
+        default=None, description="Stated license name (only if license-related)."
+    )
+    license_type: Optional[LicenseType] = Field(
+        default=None, description="Machine-readable license (only if license-related)."
+    )
     license_related: bool = Field(
-        default=False, description="APC related to specific license."
+        default=False, description="True if APC is tied to a specific license."
     )
     fee: List[MonetaryAmount] = Field(
         default_factory=list, description="Price of APC. One per currency."
