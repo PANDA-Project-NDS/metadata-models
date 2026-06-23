@@ -4,7 +4,14 @@ import re
 from typing import TYPE_CHECKING, Any, Generic, List, Optional, TypeVar
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 try:
     from .vocab import (
@@ -63,6 +70,7 @@ class _JsonStringParser:
                 pass
         return data
 
+
 class JsonHandlingBaseModel(_JsonStringParser, BaseModel):
     pass
 
@@ -91,6 +99,20 @@ class CleanSourcedValue(CleanSourcedModel, Generic[T]):
 
     model_config = ConfigDict(extra="forbid")
     value: T
+
+
+# TODO: maybe wrap/flatten .value on de-/serialization
+#    @model_validator(mode="before")
+#    @classmethod
+#    def _wrap_plain_value(cls, data):
+#        if not isinstance(data, dict):
+#            return {"value": data}
+#        return data
+#    @model_serializer(mode="wrap")
+#    def _serialize(self, handler, info):
+#        if len(self.model_fields) == 1 and "value" in self.model_fields:
+#            return self.value
+#        return handler(self)
 
 
 # --- Evidence-enabled variants ---
@@ -259,6 +281,18 @@ class ISSN(JsonHandlingBaseModel):
                 raise ValueError("ISSN must follow the NNNN-NNNN format")
         return v
 
+    @model_validator(mode="after")
+    def check_issn_consistency(self) -> "ISSN":
+        p = self.print.value if self.print else None
+        o = self.online.value if self.online else None
+        l = self.linking.value if self.linking else None
+
+        if p is not None and o is not None and p == o:
+            raise ValueError("print and online ISSN must not be identical")
+        if l is not None and l != p and l != o:
+            raise ValueError(f"linking ISSN {l} must match print ({p}) or online ({o})")
+        return self
+
 
 class MonetaryAmount(JsonHandlingBaseModel):
     """Numeric Monetary value with associated currency."""
@@ -289,6 +323,7 @@ class MonetaryAmount(JsonHandlingBaseModel):
     def __hash__(self):
         return hash((self.value, self.currency))
 
+
 class APC(SourcedModel):
     """Article Processing Charge details for a specific category or article type."""
 
@@ -302,7 +337,9 @@ class APC(SourcedModel):
     )
     per_page: bool = Field(default=False, description="APC charged per page.")
     per_figure: bool = Field(default=False, description="APC charged per figure.")
-    license_related: bool = Field(default=False, description="APC related to specific license.")
+    license_related: bool = Field(
+        default=False, description="APC related to specific license."
+    )
     fee: List[MonetaryAmount] = Field(
         default_factory=list, description="Price of APC. One per currency."
     )
@@ -320,7 +357,15 @@ class APC(SourcedModel):
         return v
 
     def __hash__(self):
-        return hash((self.article_type, self.category, self.per_page, self.per_figure, self.license_related))
+        return hash(
+            (
+                self.article_type,
+                self.category,
+                self.per_page,
+                self.per_figure,
+                self.license_related,
+            )
+        )
 
     def __eq__(self, other):
         if isinstance(other, APC):
@@ -329,13 +374,13 @@ class APC(SourcedModel):
                 self.category,
                 self.per_page,
                 self.per_figure,
-                self.license_related
+                self.license_related,
             ) == (
                 other.article_type,
                 other.category,
                 other.per_page,
                 other.per_figure,
-                self.license_related
+                self.license_related,
             )
         return super().__eq__(other)
 
@@ -343,7 +388,6 @@ class APC(SourcedModel):
     def dedup_sort_fees(self) -> "APC":
         self.fee = sorted(dict.fromkeys(self.fee), key=lambda f: f.currency)
         return self
-
 
 
 class Discount(JsonHandlingBaseModel):
@@ -527,7 +571,7 @@ class Pricing(JsonHandlingBaseModel):
     @model_validator(mode="after")
     def dedup_apcs(self) -> "Pricing":
         """Deduplicate APCs by identity, merging fees for matches."""
-        seen: dict[APC, None] = {} # dict to preserve insertion order
+        seen: dict[APC, None] = {}  # dict to preserve insertion order
         for apc in self.article_processing_charges:
             if apc in seen:
                 existing = next(e for e in seen if e == apc)
