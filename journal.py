@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from typing import TYPE_CHECKING, Any, Generic, List, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, List, Optional, TypeAlias, TypeVar
 
 from dotenv import load_dotenv
 from pydantic import (
@@ -128,7 +128,7 @@ class EvidenceSourcedModel(CleanSourcedModel):
     )
 
 
-class EvidenceSourcedValue(CleanSourcedValue, Generic[T]):
+class EvidenceSourcedValue(CleanSourcedValue[T]):
     """A value paired with its supporting evidence."""
 
     evidence: Evidence = Field(
@@ -137,8 +137,12 @@ class EvidenceSourcedValue(CleanSourcedValue, Generic[T]):
 
 
 # --- Module-level alias ---
-SourcedModel = EvidenceSourcedModel if INCLUDE_EVIDENCE else CleanSourcedModel
-SourcedValue = EvidenceSourcedValue if INCLUDE_EVIDENCE else CleanSourcedValue
+if INCLUDE_EVIDENCE:
+    SourcedModel: type[CleanSourcedModel] = EvidenceSourcedModel
+    SourcedValue: TypeAlias = EvidenceSourcedValue[T]
+else:
+    SourcedModel: type[CleanSourcedModel] = CleanSourcedModel
+    SourcedValue: TypeAlias = CleanSourcedValue[T]
 
 
 class PublicationFrequency(SourcedModel):
