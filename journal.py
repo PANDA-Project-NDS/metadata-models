@@ -661,7 +661,8 @@ class JournalMetadata(
     """
 
     model_config = ConfigDict(title="JournalMetadata")
-    journal_id: Optional[str] = Field(default=None, title="Journal ID")
+    journal_id: Optional[str] = Field(default=None, title="Internal Journal ID")
+    publisher_id: Optional[str] = Field(default=None, title="Internal Publisher ID")
     uri: Optional[str] = Field(
         default=None, description="Canonical journal homepage URI."
     )
