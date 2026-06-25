@@ -26,6 +26,7 @@ try:
         LicenseType,
     )
 except ImportError:
+    # pyrefly: ignore [missing-import]
     from vocab import (
         ArticleTypeValue,
         DiscountType,
@@ -652,7 +653,7 @@ class EditorialExtraction(JsonHandlingBaseModel):
         default_factory=list, description="Editorial board members."
     )
 
-
+type JournalPass = BasicInfoExtraction | PoliciesExtraction | FeesExtraction | EditorialExtraction
 # --- Final Schema ---
 
 
