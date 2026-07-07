@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Generic, List, Optional, TypeAlias, TypeVar
 
 from dotenv import load_dotenv
@@ -750,4 +750,8 @@ class JournalMetadata(
     publisher_id: Optional[str] = Field(default=None, title="Internal Publisher ID")
     uri: Optional[str] = Field(
         default=None, description="Canonical journal homepage URI."
+    )
+    extracted_at: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC timestamp of when the metadata was extracted/generated.",
     )
