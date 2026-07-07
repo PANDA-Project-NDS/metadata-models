@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from datetime import date
 from typing import TYPE_CHECKING, Any, Generic, List, Optional, TypeAlias, TypeVar
 
 from dotenv import load_dotenv
@@ -17,26 +18,28 @@ try:
     from .vocab import (
         ArticleTypeValue,
         DiscountType,
+        EligibilityMechanism,
         Frequency,
         IndexingService,
+        LicenseType,
         MembershipType,
         ReviewType,
         SupportedCurrency,
         publisher_examples,
-        LicenseType,
     )
 except ImportError:
     # pyrefly: ignore [missing-import]
     from vocab import (
         ArticleTypeValue,
         DiscountType,
+        EligibilityMechanism,
         Frequency,
         IndexingService,
+        LicenseType,
         MembershipType,
         ReviewType,
         SupportedCurrency,
         publisher_examples,
-        LicenseType,
     )
 
 T = TypeVar("T")
@@ -412,25 +415,85 @@ class Discount(JsonHandlingBaseModel):
         default=None, description="Fixed monetary discount amount if applicable."
     )
     percentage: Optional[float] = Field(
-        default=None, description="Percentage discount amount if applicable."
+        default=None,
+        gt=0,
+        le=100,
+        description="Percentage discount amount if applicable.",
     )
     eligibility: str = Field(
-        ..., description="Criteria for discount eligibility as stated (quote)."
+        ...,
+        min_length=1,
+        description="Criteria for discount eligibility as stated (quote).",
     )
-    membership_required: bool = Field(
-        False, description="Discount requires active membership."
+    eligibility_mechanism: EligibilityMechanism = Field(
+        default="unconditional",
+        description="Primary structural eligibility gate for this discount, independent "
+        "of time-limits or article-type restrictions (captured in dedicated fields). "
+        "'institutional_agreement' when the author's institution has a transformative "
+        "or partnership agreement with the publisher (e.g., DEAL, CRKN, WOAA). "
+        "'individual_membership' when the author's personal society or organization "
+        "membership is required. "
+        "'country_based' when eligibility depends on the country of the author's "
+        "institution (e.g., Research4Life, World Bank income classifications). "
+        "'unconditional' when the discount has no institutional/membership/country gate. "
+        "'other' when a gate exists but doesn't fit the categories above (e.g., hardship "
+        "application, editorial invitation).",
     )
+    eligible_article_types: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Article types eligible for this discount. Empty means the "
+            "discount applies to all article types with no restriction; a "
+            "non-empty list means only these specific types qualify."
+        ),
+        examples=[["Editorial", "Review", "Commentary"], ["Opinion"], []],
+    )
+    time_limited: bool = Field(
+        default=False,
+        description="Discount is available only for a limited time period.",
+    )
+    expires_after: Optional[date] = Field(
+        default=None,
+        description="Expiry date after which the discount is no longer available. "
+        "None when the end date is unspecified (e.g., 'until further notice').",
+    )
+
+    @field_validator("eligible_article_types", mode="before")
+    @classmethod
+    def dedup_article_types(cls, v):
+        """Deduplicate article types case-insensitively, preserving
+        the casing of the first occurrence."""
+        if isinstance(v, list):
+            seen: list[str] = []
+            seen_lower: set[str] = set()
+            for item in v:
+                key = item.strip().lower() if isinstance(item, str) else item
+                if key not in seen_lower:
+                    seen_lower.add(key)
+                    seen.append(item.strip() if isinstance(item, str) else item)
+            return seen
+        return v
 
     @model_validator(mode="after")
     def validate_discount_fields(self) -> "Discount":
+        """Enforce discount type invariants.
+
+        - 'fixed' requires amount, forbids percentage.
+        - 'percent' requires percentage, forbids amount.
+        - 'waiver' forbids both amount and percentage.
+        - Converts 100% percent to waiver.
+        """
+
         if self.type == "fixed" and self.amount is None:
             raise ValueError("'fixed' discount requires 'amount'")
+        if self.type == "fixed" and self.percentage is not None:
+            raise ValueError("'fixed' discount should not have 'percentage'")
         if self.type == "percent" and self.percentage is None:
             raise ValueError("'percent' discount requires 'percentage'")
-        if (
-            self.type == "waiver"
-            and self.amount is not None
-            and self.percentage is not None
+        if self.type == "percent" and self.amount is not None:
+            raise ValueError("'percent' discount should not have 'amount'")
+        if self.type == "waiver" and (
+            self.amount is not None or self.percentage is not None
         ):
             raise ValueError(
                 "'waiver' discount should not have 'amount' or 'percentage'"
@@ -441,6 +504,20 @@ class Discount(JsonHandlingBaseModel):
             self.percentage = None
             self.type = "waiver"
 
+        return self
+
+    @model_validator(mode="after")
+    def check_expiry_consistency(self) -> "Discount":
+        """Ensure time_limited and expires_after are consistent.
+
+        A permanent discount (time_limited=False) must not carry
+        an expiry date.
+        """
+        if not self.time_limited and self.expires_after is not None:
+            raise ValueError(
+                "expires_after must be None when time_limited is False "
+                "(a permanent discount cannot have an expiry date)."
+            )
         return self
 
 
@@ -653,7 +730,10 @@ class EditorialExtraction(JsonHandlingBaseModel):
         default_factory=list, description="Editorial board members."
     )
 
-type JournalPass = BasicInfoExtraction | PoliciesExtraction | FeesExtraction | EditorialExtraction
+
+type JournalPass = (
+    BasicInfoExtraction | PoliciesExtraction | FeesExtraction | EditorialExtraction
+)
 # --- Final Schema ---
 
 

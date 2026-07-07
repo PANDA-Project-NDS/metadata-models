@@ -109,3 +109,10 @@ type LicenseType = Literal[
     "CC BY-NC-ND",
     "other",
 ]
+type EligibilityMechanism = Literal[
+    "institutional_agreement",
+    "individual_membership",
+    "country_based",
+    "unconditional",
+    "other",
+]
