@@ -379,6 +379,7 @@ class APC(SourcedModel):
                 self.category,
                 self.per_page,
                 self.per_figure,
+                self.license_type,
                 self.license_related,
             )
         )
@@ -390,13 +391,15 @@ class APC(SourcedModel):
                 self.category,
                 self.per_page,
                 self.per_figure,
+                self.license_type,
                 self.license_related,
             ) == (
                 other.article_type,
                 other.category,
                 other.per_page,
                 other.per_figure,
-                self.license_related,
+                other.license_type,
+                other.license_related,
             )
         return super().__eq__(other)
 
