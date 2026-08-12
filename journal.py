@@ -413,15 +413,22 @@ class Discount(JsonHandlingBaseModel):
     """Information about waivers or discounts available for publication fees."""
 
     model_config = ConfigDict(extra="forbid")
-    type: DiscountType = Field(..., description="Discount type label.")
+    type: DiscountType = Field(
+        ...,
+        description=(
+            "Discount type: 'fixed' (requires amount), "
+            "'percent' (requires percentage), 'waiver' (no amount/percentage), "
+            "'unspecified' (no stated amount/percentage)."
+        ),
+    )
     amount: Optional[MonetaryAmount] = Field(
-        default=None, description="Fixed monetary discount amount if applicable."
+        default=None, description="Fixed monetary discount amount if `type = fixed`."
     )
     percentage: Optional[float] = Field(
         default=None,
         gt=0,
         le=100,
-        description="Percentage discount amount if applicable.",
+        description="Percentage discount amount if `type = percent`.",
     )
     eligibility: str = Field(
         ...,
@@ -457,8 +464,11 @@ class Discount(JsonHandlingBaseModel):
     )
     expires_after: Optional[date] = Field(
         default=None,
-        description="Expiry date after which the discount is no longer available. "
-        "None when the end date is unspecified (e.g., 'until further notice').",
+        description=(
+            "Expiry date after which the discount is no longer available. "
+            "Requires `time_limited = True`. "
+            "None when the end date is unspecified (e.g., 'until further notice')."
+        ),
     )
 
     @field_validator("eligible_article_types", mode="before")
@@ -500,6 +510,10 @@ class Discount(JsonHandlingBaseModel):
         ):
             raise ValueError(
                 "'waiver' discount should not have 'amount' or 'percentage'"
+            )
+        if self.type == "unspecified" and (self.amount is not None or self.percentage is not None):
+            raise ValueError(
+                "'unspecified' discount should not have 'amount' or 'percentage'"
             )
 
         # convert 100 percent to waiver
