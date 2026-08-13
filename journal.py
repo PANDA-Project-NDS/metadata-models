@@ -768,7 +768,11 @@ class JournalMetadata(
     uri: Optional[str] = Field(
         default=None, description="Canonical journal homepage URI."
     )
-    extracted_at: Optional[datetime] = Field(
+    extraction_time: Optional[datetime] = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp of when the metadata was extracted/generated.",
+    )
+    extraction_model: Optional[str] = Field(
+        default=None,
+        description="Identifier of the model used for extraction (e.g., 'gpt-5').",
     )
