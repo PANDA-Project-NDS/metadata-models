@@ -1,5 +1,5 @@
 [project]
-name = "journal-amodels"
+name = "journal-models"
 version = "0.1.0"
 description = "Canonical journal metadata schema models"
 requires-python = ">=3.13"
